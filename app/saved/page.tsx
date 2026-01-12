@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { GlassCard, GlassButton } from '@/components/ui';
 import {
   getSavedCandidates,
@@ -11,11 +11,14 @@ import {
   exportToJSON,
   SavedCandidate,
 } from '@/lib/savedCandidates';
+import CandidateDetailModal from '@/components/CandidateDetailModal';
 
 export default function SavedPage() {
   const [candidates, setCandidates] = useState<SavedCandidate[]>([]);
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [selectedCandidate, setSelectedCandidate] = useState<SavedCandidate | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadCandidates();
@@ -49,6 +52,19 @@ export default function SavedPage() {
 
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -59,7 +75,7 @@ export default function SavedPage() {
           </p>
         </div>
         {candidates.length > 0 && (
-          <div className="relative">
+          <div className="relative" ref={exportMenuRef}>
             <GlassButton variant="primary" onClick={() => setShowExportMenu(!showExportMenu)}>
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -136,7 +152,12 @@ export default function SavedPage() {
       ) : (
         <div className="grid gap-4">
           {candidates.map((candidate) => (
-            <GlassCard key={candidate.id} hover>
+            <GlassCard
+              key={candidate.id}
+              hover
+              onClick={() => setSelectedCandidate(candidate)}
+              className="cursor-pointer"
+            >
               <div className="flex items-start gap-4">
                 {candidate.picture_url ? (
                   <img
@@ -155,7 +176,7 @@ export default function SavedPage() {
                   <p className="text-white/70 text-sm">{candidate.headline || 'No headline'}</p>
                   <p className="text-white/50 text-sm">{candidate.location || 'Location unknown'}</p>
 
-                  <div className="flex gap-4 mt-2 text-sm">
+                  <div className="flex gap-4 mt-2 text-sm" onClick={(e) => e.stopPropagation()}>
                     {candidate.linkedin_url && (
                       <a
                         href={candidate.linkedin_url}
@@ -175,7 +196,7 @@ export default function SavedPage() {
                   </div>
 
                   {/* Notes Section */}
-                  <div className="mt-3 pt-3 border-t border-white/10">
+                  <div className="mt-3 pt-3 border-t border-white/10" onClick={(e) => e.stopPropagation()}>
                     {editingNotes === candidate.id ? (
                       <div className="space-y-2">
                         <textarea
@@ -232,7 +253,10 @@ export default function SavedPage() {
                 </div>
 
                 <button
-                  onClick={() => candidate.id && handleRemove(candidate.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    candidate.id && handleRemove(candidate.id);
+                  }}
                   className="px-3 py-1.5 bg-red-500/20 text-red-400 text-sm rounded-lg hover:bg-red-500/30 transition-colors flex items-center gap-1"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,6 +268,15 @@ export default function SavedPage() {
             </GlassCard>
           ))}
         </div>
+      )}
+
+      {/* Candidate Detail Modal */}
+      {selectedCandidate && (
+        <CandidateDetailModal
+          profile={selectedCandidate}
+          onClose={() => setSelectedCandidate(null)}
+          isSaved={true}
+        />
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Profile } from '@/lib/pearch';
 import { GlassButton } from '@/components/ui';
 
@@ -20,6 +21,12 @@ export default function CandidateDetailModal({
   isSaved = false,
 }: CandidateDetailModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Wait for client-side mount before rendering portal
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Close on escape key
   useEffect(() => {
@@ -37,9 +44,18 @@ export default function CandidateDetailModal({
 
   // Prevent body scroll when modal is open
   useEffect(() => {
+    const scrollY = window.scrollY;
     document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
     return () => {
       document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      window.scrollTo(0, scrollY);
     };
   }, []);
 
@@ -49,17 +65,16 @@ export default function CandidateDetailModal({
   const hasEducation = profile.education && profile.education.length > 0;
   const hasSkills = profile.skills && profile.skills.length > 0;
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
       onClick={handleBackdropClick}
+      style={{ animation: 'fadeIn 0.2s ease-out' }}
     >
       <div
         ref={modalRef}
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[#1c1c1e] border border-white/10 shadow-2xl"
-        style={{
-          animation: 'slideUp 0.3s ease-out',
-        }}
+        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-[#1c1c1e] border border-white/10 shadow-2xl"
+        style={{ animation: 'slideUp 0.3s ease-out' }}
       >
         {/* Close Button */}
         <button
@@ -304,18 +319,32 @@ export default function CandidateDetailModal({
         </div>
       </div>
 
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes slideUp {
           from {
             opacity: 0;
-            transform: translateY(20px);
+            transform: translateY(20px) scale(0.98);
           }
           to {
             opacity: 1;
-            transform: translateY(0);
+            transform: translateY(0) scale(1);
+          }
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
           }
         }
       `}</style>
     </div>
   );
+
+  // Don't render anything until mounted (prevents SSR issues)
+  if (!mounted) return null;
+
+  // Use portal to render modal at document body level
+  return createPortal(modalContent, document.body);
 }

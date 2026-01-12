@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { getStoredCredits, getWarningLevel, CreditState } from '@/lib/credits';
 
 export default function CreditTracker() {
-  const [credits, setCredits] = useState<CreditState>({ used: 0, limit: 300, logs: [] });
+  const [credits, setCredits] = useState<CreditState>({ used: 0, limit: 5000, logs: [] });
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {

@@ -3,7 +3,13 @@ import { createPearchClient, SearchParams, calculateSearchCost, Profile } from '
 
 const apiKey = process.env.PEARCH_API_KEY;
 
-function transformSearchResults(apiResponse: Record<string, unknown>): { profiles: Profile[]; thread_id?: string } {
+interface TransformedResult {
+  profiles: Profile[];
+  thread_id?: string;
+  credits_used?: number;
+}
+
+function transformSearchResults(apiResponse: Record<string, unknown>): TransformedResult {
   const searchResults = apiResponse.search_results as Array<{ docid: string; profile: Record<string, unknown> }> || [];
 
   const profiles: Profile[] = searchResults.map((result) => {
@@ -36,6 +42,7 @@ function transformSearchResults(apiResponse: Record<string, unknown>): { profile
   return {
     profiles,
     thread_id: apiResponse.thread_id as string,
+    credits_used: apiResponse.credits_used as number | undefined,
   };
 }
 

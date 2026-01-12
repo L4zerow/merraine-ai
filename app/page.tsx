@@ -7,7 +7,7 @@ import { getStoredCredits } from '@/lib/credits';
 import { getSavedCount } from '@/lib/savedCandidates';
 
 export default function Dashboard() {
-  const [credits, setCredits] = useState({ used: 0, limit: 300 });
+  const [credits, setCredits] = useState({ used: 0, limit: 5000 });
   const [savedCount, setSavedCount] = useState(0);
 
   useEffect(() => {

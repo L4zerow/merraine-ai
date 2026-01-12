@@ -14,7 +14,7 @@ export interface CreditState {
 }
 
 const STORAGE_KEY = 'merraine_credits';
-const DEFAULT_LIMIT = 300;
+const DEFAULT_LIMIT = 5000;
 
 export const CREDIT_THRESHOLDS = {
   warning: 50,

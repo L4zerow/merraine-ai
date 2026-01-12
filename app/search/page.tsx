@@ -72,7 +72,7 @@ export default function SearchPage() {
 
   const costPerProfile = getCostPerProfile();
   const estimatedCost = costPerProfile * options.limit;
-  const remainingCredits = typeof window !== 'undefined' ? getRemainingCredits() : 300;
+  const remainingCredits = typeof window !== 'undefined' ? getRemainingCredits() : 5000;
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -110,9 +110,9 @@ export default function SearchPage() {
       setResults(allResults);
       setThreadId(data.thread_id || null);
 
-      // Log actual credit usage
-      const actualCost = newProfiles.length * costPerProfile;
-      logCreditUsage('Search', actualCost, `${newProfiles.length} profiles @ ${costPerProfile}/each`);
+      // Log actual credit usage from API response, fallback to estimate
+      const actualCost = data.credits_used ?? (newProfiles.length * costPerProfile);
+      logCreditUsage('Search', actualCost, `${newProfiles.length} profiles`);
       triggerCreditUpdate();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
