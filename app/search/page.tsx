@@ -6,6 +6,7 @@ import { Profile, calculateSearchCost } from '@/lib/pearch';
 import { logCreditUsage, canAfford, getRemainingCredits } from '@/lib/credits';
 import { useCreditUpdate } from '@/components/CreditTracker';
 import { saveCandidate, isCandidateSaved, getSavedCount } from '@/lib/savedCandidates';
+import CandidateDetailModal from '@/components/CandidateDetailModal';
 
 interface SearchOptions {
   type: 'fast' | 'pro';
@@ -33,6 +34,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
 
   const triggerCreditUpdate = useCreditUpdate();
 
@@ -313,7 +315,12 @@ export default function SearchPage() {
 
           <div className="grid gap-4">
             {results.map((profile, index) => (
-              <GlassCard key={profile.id || index} hover>
+              <GlassCard
+                key={profile.id || index}
+                hover
+                onClick={() => setSelectedProfile(profile)}
+                className="cursor-pointer"
+              >
                 <div className="flex items-start gap-4">
                   {profile.picture_url ? (
                     <img
@@ -350,7 +357,7 @@ export default function SearchPage() {
                       <p className="text-sm text-white/60 mt-2 italic">{profile.insights}</p>
                     )}
 
-                    <div className="flex gap-4 mt-3">
+                    <div className="flex gap-4 mt-3" onClick={(e) => e.stopPropagation()}>
                       {profile.email && (
                         <a href={`mailto:${profile.email}`} className="text-[#0A84FF] text-sm hover:underline flex items-center gap-1">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -387,7 +394,10 @@ export default function SearchPage() {
                       </div>
                     )}
                     <button
-                      onClick={() => handleSaveCandidate(profile)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSaveCandidate(profile);
+                      }}
                       disabled={!profile.id || savedIds.has(profile.id)}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
                         profile.id && savedIds.has(profile.id)
@@ -428,6 +438,17 @@ export default function SearchPage() {
           <div className="text-white/40 text-lg">Enter a search query to find candidates</div>
           <p className="text-white/30 mt-2">Try something like "React developer in New York"</p>
         </GlassCard>
+      )}
+
+      {/* Candidate Detail Modal */}
+      {selectedProfile && (
+        <CandidateDetailModal
+          profile={selectedProfile}
+          searchQuery={query}
+          onClose={() => setSelectedProfile(null)}
+          onSave={handleSaveCandidate}
+          isSaved={selectedProfile.id ? savedIds.has(selectedProfile.id) : false}
+        />
       )}
     </div>
   );

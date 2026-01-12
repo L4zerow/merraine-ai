@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Navigation from '@/components/Navigation';
+import AppShell from '@/components/AppShell';
+import Providers from '@/components/Providers';
 
 export const metadata: Metadata = {
   title: 'Merraine AI - Recruiting Platform',
@@ -15,12 +16,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Navigation />
-        <main className="pt-28 pb-24 md:pb-8 px-4">
-          <div className="max-w-7xl mx-auto">
-            {children}
-          </div>
-        </main>
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   );

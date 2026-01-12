@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPearchClient, EnrichParams, calculateEnrichCost } from '@/lib/pearch';
 
+export const dynamic = 'force-dynamic';
+
 const apiKey = process.env.PEARCH_API_KEY;
 
 export async function GET(request: NextRequest) {
