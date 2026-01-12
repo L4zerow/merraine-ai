@@ -7,6 +7,12 @@ import { logCreditUsage, canAfford, getRemainingCredits } from '@/lib/credits';
 import { useCreditUpdate } from '@/components/CreditTracker';
 import { saveCandidate, isCandidateSaved, getSavedCount } from '@/lib/savedCandidates';
 import CandidateDetailModal from '@/components/CandidateDetailModal';
+import {
+  saveSearchCache,
+  loadSearchCache,
+  clearSearchCache,
+  getSearchCacheAge,
+} from '@/lib/searchCache';
 
 interface SearchOptions {
   type: 'fast' | 'pro';
@@ -35,8 +41,21 @@ export default function SearchPage() {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  const [cacheAge, setCacheAge] = useState<number | null>(null);
 
   const triggerCreditUpdate = useCreditUpdate();
+
+  // Load cached search results on mount
+  useEffect(() => {
+    const cached = loadSearchCache();
+    if (cached) {
+      setQuery(cached.query);
+      setOptions(cached.options);
+      setResults(cached.results);
+      setThreadId(cached.threadId);
+      setCacheAge(getSearchCacheAge());
+    }
+  }, []);
 
   // Update saved status when results change
   useEffect(() => {
@@ -48,6 +67,14 @@ export default function SearchPage() {
     });
     setSavedIds(newSavedIds);
   }, [results]);
+
+  // Clear results and cache
+  const handleClearResults = () => {
+    setResults([]);
+    setThreadId(null);
+    setCacheAge(null);
+    clearSearchCache();
+  };
 
   const handleSaveCandidate = (profile: Profile) => {
     if (!profile.id) return;
@@ -107,8 +134,19 @@ export default function SearchPage() {
 
       const newProfiles = data.profiles || [];
       const allResults = threadId ? [...results, ...newProfiles] : newProfiles;
+      const newThreadId = data.thread_id || null;
+
       setResults(allResults);
-      setThreadId(data.thread_id || null);
+      setThreadId(newThreadId);
+      setCacheAge(0); // Fresh results
+
+      // Save to cache for persistence
+      saveSearchCache({
+        query,
+        results: allResults,
+        threadId: newThreadId,
+        options,
+      });
 
       // Log actual credit usage from API response, fallback to estimate
       const actualCost = data.credits_used ?? (newProfiles.length * costPerProfile);
@@ -303,14 +341,29 @@ export default function SearchPage() {
       {results.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-white">
-              Results ({results.length})
-            </h2>
-            {threadId && (
-              <GlassButton onClick={handleSearch} loading={loading} size="sm">
-                Load More
-              </GlassButton>
-            )}
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-semibold text-white">
+                Results ({results.length})
+              </h2>
+              {cacheAge !== null && cacheAge > 0 && (
+                <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
+                  Cached {cacheAge < 60 ? `${cacheAge}m ago` : '< 1h ago'}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleClearResults}
+                className="px-3 py-1.5 text-sm text-white/50 hover:text-white/80 hover:bg-white/5 rounded-lg transition-colors"
+              >
+                Clear
+              </button>
+              {threadId && (
+                <GlassButton onClick={handleSearch} loading={loading} size="sm">
+                  Load More
+                </GlassButton>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-4">
