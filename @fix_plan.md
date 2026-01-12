@@ -1,55 +1,49 @@
 # Merraine AI - Fix Plan
 
-## High Priority (MVP Core) - COMPLETED
+## STATUS: ALL COMPLETE - READY FOR VERCEL DEPLOYMENT
 
-### Project Setup
-- [x] Initialize Next.js 14 project with TypeScript and Tailwind
-- [x] Set up project structure (app/, components/, lib/)
-- [x] Create environment config for PEARCH_API_KEY
+---
 
-### Core Library
-- [x] Create lib/pearch.ts - API client with types
-- [x] Create lib/credits.ts - Credit tracking system
+## PRIORITY 1: Fix 404 Navigation Errors ✅ COMPLETE
 
-### API Routes
-- [x] POST /api/search - Candidate search
-- [x] GET /api/enrich - Profile enrichment
-- [x] POST /api/jobs - Upsert jobs
-- [x] GET /api/jobs - List jobs
-- [x] DELETE /api/jobs - Delete jobs
-- [x] POST /api/match - Match candidates to jobs
+- [x] All pages exist and load correctly
+- [x] Navigation links work (no 404s)
+- [x] Build passes
 
-### Pages
-- [x] Layout with navigation and credit display
-- [x] Search page - Natural language candidate search
-- [x] Jobs page - Manage indexed jobs
-- [x] Matches page - Match profiles against jobs
+---
 
-### UI Components
-- [x] Base glass components (Card, Button, Input)
-- [x] CreditTracker - Always visible credit balance
-- [x] Profile display in search results
+## PRIORITY 2: Candidate Persistence & Export ✅ COMPLETE
 
-## Medium Priority (Polish)
-- [ ] Cost preview before API calls
-- [x] Search options (pro/fast, insights, scoring)
-- [x] Email/phone reveal toggles
-- [x] Error states and loading indicators
-- [ ] Usage history display
+- [x] lib/savedCandidates.ts created with full localStorage persistence
+- [x] Save button added to search results
+- [x] /saved page created with full CRUD functionality
+- [x] CSV export working
+- [x] Navigation updated with "Saved" link
 
-## Low Priority (Later)
-- [ ] Saved searches
-- [ ] Export functionality
-- [ ] Advanced filters
+---
 
-## Completed
-- [x] Project initialization (Ralph setup)
-- [x] PROJECT_ESSENCE.md created
-- [x] Full MVP implementation
-- [x] API integration tested and working
+## PRIORITY 3: End-to-End Testing ✅ COMPLETE
 
-## Notes
-- Reference implementation at: /Users/laz/Documents/WADL/Dev/Recruiting Test/recruiting-demo/
-- MVP is complete and functional
-- Search API tested and returning real results
-- Jobs API may have temporary Pearch API issues (500 errors)
+- [x] All routes return 200: /, /search, /saved, /jobs, /matches
+- [x] Search API tested with real query - returns profiles
+- [x] Build compiles with no errors
+
+---
+
+## PRIORITY 4: Vercel Deployment Preparation ✅ COMPLETE
+
+- [x] vercel.json created with proper config
+- [x] next.config.js updated for LinkedIn images
+- [x] .env.example created for documentation
+- [x] No hardcoded localhost URLs
+- [x] Production build successful
+
+---
+
+## Deployment Instructions
+
+1. Push code to GitHub
+2. Connect repo to Vercel
+3. Add environment variable in Vercel dashboard:
+   - `PEARCH_API_KEY` = your Pearch API key
+4. Deploy

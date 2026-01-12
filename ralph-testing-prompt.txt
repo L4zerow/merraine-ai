@@ -1,0 +1,50 @@
+You are testing Merraine AI, a recruiting app built with Next.js. Your job is to do end-to-end user testing from a recruiter's perspective.
+
+START THE APP:
+Run `npm run dev` and test at http://localhost:3000
+
+TEST AS A RECRUITER WOULD:
+
+1. DASHBOARD (/)
+- Does it load correctly?
+- Is it clear what this app does?
+- Can I navigate to all sections easily?
+
+2. SEARCH PAGE (/search)
+- Try a natural language search like "senior software engineers in San Francisco with React experience"
+- Test different search options (Fast vs Pro, insights, scoring, freshness, emails, phones)
+- Are the credit costs clear BEFORE I search?
+- Do results display properly?
+- Does the credit tracker update after searching?
+
+3. JOBS PAGE (/jobs)
+- Add a test job with ID "test-senior-dev" and a realistic job description
+- Does the cost (1 credit) show clearly?
+- Does the job appear in the list after adding?
+- Try deleting the job - does it work?
+
+4. MATCHES PAGE (/matches)
+- Load the sample profile
+- Run a match against indexed jobs
+- Are the match scores displayed clearly?
+- Is the credit cost clear (1 per match found)?
+
+5. CREDIT SYSTEM (throughout)
+- Is it always obvious what actions cost?
+- Does the credit tracker in the header update in real-time?
+- Are there warnings when credits are low?
+
+ITERATE AND FIX:
+- If you find bugs, fix them
+- If something is confusing from a recruiter's POV, improve it
+- If credit costs aren't clear somewhere, make them clearer
+- Test again after each fix
+
+REPORT:
+After testing, create a file called TESTING_REPORT.md with:
+- What worked well
+- Bugs found and fixed
+- UX improvements made
+- Any remaining issues
+
+Keep iterating until the app feels polished and recruiter-friendly.

@@ -99,6 +99,24 @@ export default function MatchesPage() {
         </p>
       </div>
 
+      {/* Credit Cost Info Banner */}
+      <GlassCard className="bg-[#0A84FF]/10 border-[#0A84FF]/30">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-[#0A84FF]/20 flex items-center justify-center">
+            <svg className="w-5 h-5 text-[#0A84FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <div className="text-white font-medium">How Matching Works</div>
+            <div className="text-sm text-white/60">
+              Cost: <span className="text-[#0A84FF]">1 credit per matching job found</span> •
+              You only pay for successful matches, not all jobs scanned
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+
       {/* Job Count Warning */}
       {jobCount === 0 && (
         <GlassCard className="border-yellow-500/30 bg-yellow-500/10">
@@ -139,10 +157,13 @@ export default function MatchesPage() {
           <div className="flex items-center justify-between">
             <div className="text-sm text-white/50">
               {jobCount > 0 ? (
-                <>
-                  <span className="text-white">{jobCount}</span> jobs indexed - Cost: up to{' '}
-                  <span className="text-white">{jobCount}</span> credits
-                </>
+                <div className="flex items-center gap-2">
+                  <span className="text-white">{jobCount}</span> jobs indexed
+                  <span className="text-white/30">•</span>
+                  <span>Max cost: <span className="text-[#0A84FF] font-medium">{jobCount} credits</span></span>
+                  <span className="text-white/30">•</span>
+                  <span className="text-[#30D158]">Pay only for matches</span>
+                </div>
               ) : (
                 'No jobs to match against'
               )}
@@ -174,9 +195,14 @@ export default function MatchesPage() {
       {/* Results */}
       {matches.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-2xl font-semibold text-white">
-            Matching Jobs ({matches.length})
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold text-white">
+              Matching Jobs ({matches.length})
+            </h2>
+            <span className="text-sm text-white/60 bg-white/5 px-3 py-1 rounded-full">
+              Used: <span className="text-[#0A84FF] font-medium">{matches.length} credits</span>
+            </span>
+          </div>
 
           <div className="grid gap-4">
             {matches.map((job) => (
