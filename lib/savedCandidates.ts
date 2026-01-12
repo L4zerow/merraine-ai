@@ -73,12 +73,13 @@ export function getSavedCount(): number {
 export function exportToCSV(candidates: SavedCandidate[]): void {
   if (candidates.length === 0) return;
 
-  const headers = ['Name', 'Headline', 'Location', 'LinkedIn URL', 'Notes', 'Saved At'];
+  const headers = ['Name', 'Headline', 'Location', 'LinkedIn URL', 'Email', 'Notes', 'Saved At'];
   const rows = candidates.map(c => [
     c.name || '',
     c.headline || '',
     c.location || '',
     c.linkedin_url || '',
+    c.email || '',
     c.notes || '',
     new Date(c.savedAt).toLocaleString(),
   ]);
@@ -88,11 +89,83 @@ export function exportToCSV(candidates: SavedCandidate[]): void {
     ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
   ].join('\n');
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  downloadFile(csvContent, 'text/csv;charset=utf-8;', `merraine-candidates-${getDateString()}.csv`);
+}
+
+export function exportToMarkdown(candidates: SavedCandidate[]): void {
+  if (candidates.length === 0) return;
+
+  const lines = [
+    `# Candidate List`,
+    `*Exported from Merraine AI on ${new Date().toLocaleDateString()}*`,
+    '',
+    `---`,
+    '',
+  ];
+
+  candidates.forEach((c, i) => {
+    lines.push(`## ${i + 1}. ${c.name || 'Unknown'}`);
+    lines.push('');
+    if (c.headline) lines.push(`**${c.headline}**`);
+    if (c.location) lines.push(`📍 ${c.location}`);
+    lines.push('');
+    if (c.linkedin_url) lines.push(`- [LinkedIn Profile](${c.linkedin_url})`);
+    if (c.email) lines.push(`- Email: ${c.email}`);
+    if (c.phone) lines.push(`- Phone: ${c.phone}`);
+    lines.push('');
+    if (c.summary) {
+      lines.push(`### Summary`);
+      lines.push(c.summary);
+      lines.push('');
+    }
+    if (c.notes) {
+      lines.push(`### Notes`);
+      lines.push(c.notes);
+      lines.push('');
+    }
+    lines.push(`*Saved: ${new Date(c.savedAt).toLocaleDateString()}*`);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  });
+
+  downloadFile(lines.join('\n'), 'text/markdown;charset=utf-8;', `merraine-candidates-${getDateString()}.md`);
+}
+
+export function exportToJSON(candidates: SavedCandidate[]): void {
+  if (candidates.length === 0) return;
+
+  const data = {
+    exportedAt: new Date().toISOString(),
+    source: 'Merraine AI',
+    count: candidates.length,
+    candidates: candidates.map(c => ({
+      name: c.name,
+      headline: c.headline,
+      location: c.location,
+      linkedin_url: c.linkedin_url,
+      email: c.email,
+      phone: c.phone,
+      summary: c.summary,
+      skills: c.skills,
+      notes: c.notes,
+      savedAt: c.savedAt,
+    })),
+  };
+
+  downloadFile(JSON.stringify(data, null, 2), 'application/json;charset=utf-8;', `merraine-candidates-${getDateString()}.json`);
+}
+
+function getDateString(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function downloadFile(content: string, type: string, filename: string): void {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `merraine-candidates-${new Date().toISOString().split('T')[0]}.csv`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

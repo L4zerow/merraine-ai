@@ -7,6 +7,8 @@ import {
   removeSavedCandidate,
   updateCandidateNotes,
   exportToCSV,
+  exportToMarkdown,
+  exportToJSON,
   SavedCandidate,
 } from '@/lib/savedCandidates';
 
@@ -45,9 +47,7 @@ export default function SavedPage() {
     loadCandidates();
   };
 
-  const handleExport = () => {
-    exportToCSV(candidates);
-  };
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -59,27 +59,58 @@ export default function SavedPage() {
           </p>
         </div>
         {candidates.length > 0 && (
-          <GlassButton variant="primary" onClick={handleExport}>
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export to CSV
-          </GlassButton>
+          <div className="relative">
+            <GlassButton variant="primary" onClick={() => setShowExportMenu(!showExportMenu)}>
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+              <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </GlassButton>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-48 glass-card rounded-xl p-2 z-50">
+                <button
+                  onClick={() => { exportToCSV(candidates); setShowExportMenu(false); }}
+                  className="w-full px-3 py-2 text-left text-white hover:bg-white/10 rounded-lg flex items-center gap-2"
+                >
+                  <span className="text-[#30D158]">CSV</span>
+                  <span className="text-white/50 text-sm">- Spreadsheet</span>
+                </button>
+                <button
+                  onClick={() => { exportToMarkdown(candidates); setShowExportMenu(false); }}
+                  className="w-full px-3 py-2 text-left text-white hover:bg-white/10 rounded-lg flex items-center gap-2"
+                >
+                  <span className="text-[#0A84FF]">Markdown</span>
+                  <span className="text-white/50 text-sm">- Documentation</span>
+                </button>
+                <button
+                  onClick={() => { exportToJSON(candidates); setShowExportMenu(false); }}
+                  className="w-full px-3 py-2 text-left text-white hover:bg-white/10 rounded-lg flex items-center gap-2"
+                >
+                  <span className="text-[#FF9500]">JSON</span>
+                  <span className="text-white/50 text-sm">- Data transfer</span>
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
       {/* Info Banner */}
-      <GlassCard className="bg-[#0A84FF]/10 border-[#0A84FF]/30">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-lg bg-[#0A84FF]/20 flex items-center justify-center">
-            <svg className="w-5 h-5 text-[#0A84FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <GlassCard className="bg-amber-500/10 border-amber-500/30">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
           <div className="flex-1">
-            <div className="text-white font-medium">Your saved candidates persist</div>
-            <div className="text-sm text-white/60">
-              Candidates are stored locally. Export to CSV to back them up or share with your team.
+            <div className="text-white font-medium">Export your candidates before leaving</div>
+            <div className="text-sm text-white/60 mt-1">
+              Candidates are stored in your browser only. To keep your data safe or share with your team,
+              export to <strong>CSV</strong> (Excel/Sheets), <strong>Markdown</strong> (docs), or <strong>JSON</strong> (integrations).
             </div>
           </div>
         </div>
