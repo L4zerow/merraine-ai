@@ -36,20 +36,6 @@ export default function Dashboard() {
       color: 'from-blue-500 to-cyan-500',
     },
     {
-      title: 'Manage Jobs',
-      description: 'Index and manage your job listings',
-      href: '/jobs',
-      icon: 'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
-      color: 'from-purple-500 to-pink-500',
-    },
-    {
-      title: 'Match Candidates',
-      description: 'Match profiles against your jobs',
-      href: '/matches',
-      icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1',
-      color: 'from-emerald-500 to-teal-500',
-    },
-    {
       title: 'Saved Candidates',
       description: `${savedCount} candidates saved`,
       href: '/saved',
@@ -91,7 +77,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
         {features.map((feature) => (
           <Link key={feature.href} href={feature.href}>
             <GlassCard hover className="h-full">

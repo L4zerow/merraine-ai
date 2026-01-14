@@ -167,14 +167,14 @@ class PearchClient {
   async upsertJobs(jobs: Job[]): Promise<{ success: boolean }> {
     return this.request('/v1/upsert_jobs', {
       method: 'POST',
-      body: JSON.stringify(jobs),
+      body: JSON.stringify({ jobs }),
     });
   }
 
   async findMatchingJobs(profile: Record<string, unknown>): Promise<{ jobs: MatchedJob[] }> {
     return this.request('/v1/find_matching_jobs', {
       method: 'POST',
-      body: JSON.stringify(profile),
+      body: JSON.stringify({ profile }),
     });
   }
 
@@ -188,7 +188,7 @@ class PearchClient {
   async deleteJobs(jobIds: string[]): Promise<{ success: boolean }> {
     return this.request('/v1/delete_jobs', {
       method: 'POST',
-      body: JSON.stringify(jobIds),
+      body: JSON.stringify({ job_ids: jobIds }),
     });
   }
 }

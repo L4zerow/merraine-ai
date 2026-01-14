@@ -16,7 +16,7 @@ const sections: Section[] = [
   { id: 'search', title: 'Searching for Candidates', icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' },
   { id: 'candidate-details', title: 'Viewing Candidate Details', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
   { id: 'saved', title: 'Saved Candidates', icon: 'M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z' },
-  { id: 'jobs-matching', title: 'Jobs & Matching', icon: 'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
+  { id: 'credits', title: 'Understanding Credits', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
 ];
 
 function CollapsibleSection({
@@ -170,7 +170,7 @@ export default function HelpPage() {
               </p>
 
               <h3 className="text-lg font-semibold text-white mt-6 mb-3">Platform Navigation</h3>
-              <p>The platform has 5 main pages:</p>
+              <p>The platform has 4 main pages:</p>
 
               <div className="grid sm:grid-cols-2 gap-4 mt-4">
                 <div className="bg-white/5 rounded-xl p-4">
@@ -186,12 +186,8 @@ export default function HelpPage() {
                   <p className="text-sm text-white/60">View and manage your saved candidates</p>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
-                  <p className="font-semibold text-white mb-1">Jobs</p>
-                  <p className="text-sm text-white/60">Add job descriptions for matching</p>
-                </div>
-                <div className="bg-white/5 rounded-xl p-4">
-                  <p className="font-semibold text-white mb-1">Matches</p>
-                  <p className="text-sm text-white/60">Match candidates against your jobs</p>
+                  <p className="font-semibold text-white mb-1">Help</p>
+                  <p className="text-sm text-white/60">This guide and documentation</p>
                 </div>
               </div>
             </div>
@@ -213,12 +209,10 @@ export default function HelpPage() {
                 ]}
               />
 
-              <h3 className="text-lg font-semibold text-white mt-6 mb-3">Feature Cards</h3>
+              <h3 className="text-lg font-semibold text-white mt-6 mb-3">Quick Actions</h3>
               <ul className="list-disc list-inside space-y-2 ml-4">
                 <li><strong className="text-white">Search Candidates</strong> - Start finding talent</li>
-                <li><strong className="text-white">Manage Jobs</strong> - Add job descriptions</li>
-                <li><strong className="text-white">Match Candidates</strong> - Compare to your jobs</li>
-                <li><strong className="text-white">Saved Candidates</strong> - Access your list</li>
+                <li><strong className="text-white">Saved Candidates</strong> - Access your saved list</li>
               </ul>
             </div>
           </CollapsibleSection>
@@ -235,34 +229,42 @@ export default function HelpPage() {
                   <li>&quot;Senior React developer in San Francisco with 5+ years experience&quot;</li>
                   <li>&quot;Marketing manager with B2B SaaS background&quot;</li>
                   <li>&quot;Data scientist who knows Python and machine learning&quot;</li>
+                  <li>&quot;HR Director with nonprofit experience in Chicago&quot;</li>
                 </ul>
               </div>
 
+              <h3 className="text-lg font-semibold text-white mt-6 mb-3">Location Filter</h3>
+              <p>Use the location filter to narrow results to a specific area:</p>
+              <ul className="list-disc list-inside space-y-2 ml-4 mt-2">
+                <li>Enter a city and state (e.g., &quot;Chicago, IL&quot;)</li>
+                <li>Or just a state (e.g., &quot;California&quot;)</li>
+                <li>Leave blank to search all locations</li>
+              </ul>
+
               <h3 className="text-lg font-semibold text-white mt-6 mb-3">Search Options</h3>
               <InfoTable
-                headers={['Option', 'Description']}
+                headers={['Option', 'Description', 'Cost']}
                 rows={[
-                  ['Fast Search', 'Quick results with basic profiles'],
-                  ['Pro Search', 'Higher quality, more detailed profiles'],
+                  ['Fast Search', 'Quick results with basic profiles', '1 credit/profile'],
+                  ['Pro Search', 'Higher quality, more detailed profiles', '5 credits/profile'],
                 ]}
               />
 
               <h3 className="text-lg font-semibold text-white mt-6 mb-3">Enhancements</h3>
               <InfoTable
-                headers={['Enhancement', 'What You Get']}
+                headers={['Enhancement', 'What You Get', 'Cost']}
                 rows={[
-                  ['AI Insights', 'Explanation of why candidates fit your search'],
-                  ['Match Scoring', 'Percentage score for each candidate'],
-                  ['Fresh Data', 'Recently updated profile information'],
+                  ['AI Insights', 'Explanation of why candidates fit your search', '+1 credit'],
+                  ['Fresh Data', 'Recently updated profile information', '+2 credits'],
                 ]}
               />
 
               <h3 className="text-lg font-semibold text-white mt-6 mb-3">Contact Options</h3>
               <InfoTable
-                headers={['Option', 'What You Get']}
+                headers={['Option', 'What You Get', 'Cost']}
                 rows={[
-                  ['Reveal Emails', 'Candidate email addresses'],
-                  ['Reveal Phones', 'Candidate phone numbers'],
+                  ['Reveal Emails', 'Candidate email addresses', '+2 credits'],
+                  ['Reveal Phones', 'Candidate phone numbers', '+14 credits'],
                 ]}
               />
 
@@ -270,8 +272,13 @@ export default function HelpPage() {
               <ul className="list-disc list-inside space-y-2 ml-4">
                 <li><strong className="text-white">Save button</strong> - Add candidate to your saved list</li>
                 <li><strong className="text-white">Click the card</strong> - View full candidate details</li>
-                <li><strong className="text-white">Load More</strong> - Get additional results</li>
+                <li><strong className="text-white">Load More</strong> - Get additional results (uses more credits)</li>
+                <li><strong className="text-white">Clear</strong> - Clear results and start fresh</li>
               </ul>
+
+              <TipBox>
+                Results are cached for up to 1 hour. If you navigate away and come back, your results will still be there.
+              </TipBox>
             </div>
           </CollapsibleSection>
 
@@ -288,7 +295,7 @@ export default function HelpPage() {
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
                   <p className="font-semibold text-white mb-1">Why the Fit</p>
-                  <p className="text-sm text-white/60">Match score and AI insights explaining the match</p>
+                  <p className="text-sm text-white/60">AI insights explaining why this candidate matches your search</p>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
                   <p className="font-semibold text-white mb-1">About</p>
@@ -310,9 +317,9 @@ export default function HelpPage() {
 
               <h3 className="text-lg font-semibold text-white mt-6 mb-3">Contact Buttons</h3>
               <ul className="list-disc list-inside space-y-2 ml-4">
-                <li><strong className="text-white">LinkedIn</strong> - Opens their profile</li>
-                <li><strong className="text-white">Email</strong> - Opens your email client (if revealed)</li>
-                <li><strong className="text-white">Phone</strong> - Starts a call (if revealed)</li>
+                <li><strong className="text-white">LinkedIn</strong> - Opens their profile in a new tab</li>
+                <li><strong className="text-white">Email</strong> - Opens your email client (if email was revealed)</li>
+                <li><strong className="text-white">Phone</strong> - Starts a call (if phone was revealed)</li>
               </ul>
 
               <TipBox>
@@ -329,6 +336,7 @@ export default function HelpPage() {
                 <li>Click &quot;Save&quot; on any candidate to add them to your list</li>
                 <li>Button turns green with a checkmark when saved</li>
                 <li>Access saved candidates from the Saved page</li>
+                <li>Saving is free - it doesn&apos;t cost credits</li>
               </ul>
 
               <WarningBox>
@@ -353,42 +361,66 @@ export default function HelpPage() {
               <InfoTable
                 headers={['Format', 'Best For']}
                 rows={[
-                  ['CSV', 'Excel, Google Sheets'],
+                  ['CSV', 'Excel, Google Sheets, databases'],
                   ['Markdown', 'Documents, Notion, Slack'],
-                  ['JSON', 'Technical integrations'],
+                  ['JSON', 'Technical integrations, backups'],
                 ]}
               />
+
+              <h3 className="text-lg font-semibold text-white mt-6 mb-3">Removing Candidates</h3>
+              <p>To remove a candidate from your saved list:</p>
+              <ol className="list-decimal list-inside space-y-2 ml-4 mt-2">
+                <li>Click the trash icon on the candidate card</li>
+                <li>Confirm the removal</li>
+              </ol>
             </div>
           </CollapsibleSection>
 
-          {/* Jobs & Matching */}
-          <CollapsibleSection id="jobs-matching" title="Jobs & Matching" icon={sections[5].icon}>
+          {/* Understanding Credits */}
+          <CollapsibleSection id="credits" title="Understanding Credits" icon={sections[5].icon}>
             <div className="space-y-4 text-white/70">
-              <h3 className="text-lg font-semibold text-white mb-3">Adding Jobs</h3>
-              <ol className="list-decimal list-inside space-y-2 ml-4">
-                <li>Go to the Jobs page</li>
-                <li>Enter a unique Job ID (e.g., &quot;senior-dev-sf-001&quot;)</li>
-                <li>Paste the full job description</li>
-                <li>Click &quot;Add Job&quot;</li>
-              </ol>
+              <p>Credits are the currency used for searching candidates. Different options cost different amounts.</p>
+
+              <h3 className="text-lg font-semibold text-white mt-6 mb-3">Credit Costs</h3>
+              <InfoTable
+                headers={['Action', 'Base Cost', 'Notes']}
+                rows={[
+                  ['Fast Search', '1 credit/profile', 'Basic profile data'],
+                  ['Pro Search', '5 credits/profile', 'More detailed profiles'],
+                  ['AI Insights', '+1 credit/profile', 'Adds explanation text'],
+                  ['Fresh Data', '+2 credits/profile', 'Latest profile info'],
+                  ['Reveal Emails', '+2 credits/profile', 'Shows email address'],
+                  ['Reveal Phones', '+14 credits/profile', 'Shows phone number'],
+                ]}
+              />
+
+              <h3 className="text-lg font-semibold text-white mt-6 mb-3">Example Calculations</h3>
+              <div className="space-y-3">
+                <div className="bg-white/5 rounded-xl p-4">
+                  <p className="font-semibold text-white mb-1">Fast Search, 10 profiles</p>
+                  <p className="text-sm text-white/60">1 x 10 = <span className="text-cyan-300">10 credits</span></p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <p className="font-semibold text-white mb-1">Pro Search + AI Insights, 10 profiles</p>
+                  <p className="text-sm text-white/60">(5 + 1) x 10 = <span className="text-cyan-300">60 credits</span></p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <p className="font-semibold text-white mb-1">Pro Search + Email + Phone, 5 profiles</p>
+                  <p className="text-sm text-white/60">(5 + 2 + 14) x 5 = <span className="text-cyan-300">105 credits</span></p>
+                </div>
+              </div>
 
               <TipBox>
-                Use descriptive Job IDs that help you identify the role quickly.
+                The cost estimate is shown before you search. You can adjust options to stay within budget.
               </TipBox>
 
-              <h3 className="text-lg font-semibold text-white mt-6 mb-3">Matching Candidates</h3>
-              <ol className="list-decimal list-inside space-y-2 ml-4">
-                <li>Go to the Matches page</li>
-                <li>Paste a candidate profile (JSON format)</li>
-                <li>Click &quot;Find Matching Jobs&quot;</li>
-                <li>View results with relevance scores</li>
-              </ol>
-
-              <p className="mt-4">Each match shows:</p>
+              <h3 className="text-lg font-semibold text-white mt-6 mb-3">Free Actions</h3>
               <ul className="list-disc list-inside space-y-2 ml-4">
-                <li><strong className="text-white">Job ID</strong> - Which job matched</li>
-                <li><strong className="text-white">Relevance</strong> - Why they fit</li>
-                <li><strong className="text-white">Match Score</strong> - Strength of match</li>
+                <li>Saving candidates to your list</li>
+                <li>Viewing saved candidates</li>
+                <li>Adding notes to candidates</li>
+                <li>Exporting your saved list</li>
+                <li>Viewing this help guide</li>
               </ul>
             </div>
           </CollapsibleSection>

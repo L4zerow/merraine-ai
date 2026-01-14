@@ -284,8 +284,8 @@ export default function CandidateDetailModal({
             </div>
           )}
 
-          {/* No detailed info available */}
-          {!hasInsights && !hasSummary && !hasExperience && !hasEducation && profile.score === undefined && (
+          {/* No detailed info available - only show if truly nothing useful */}
+          {!hasInsights && !hasSummary && !hasExperience && !hasEducation && !hasSkills && !profile.headline && (
             <div className="text-center py-8 text-white/50">
               <p>Limited profile information available.</p>
               <p className="text-sm mt-2">Try using "Pro Search" or enabling "AI Insights" for more details.</p>

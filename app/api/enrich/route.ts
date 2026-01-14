@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Enrich error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Enrichment failed' },
+      { error: error instanceof Error ? error.message : 'Enrich failed' },
       { status: 500 }
     );
   }
