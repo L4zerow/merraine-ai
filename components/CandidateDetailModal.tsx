@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Profile } from '@/lib/pearch';
 import { GlassButton } from '@/components/ui';
+import { scoreToPercentage, getTierForScore } from '@/lib/searchResultsUtils';
 
 interface CandidateDetailModalProps {
   profile: Profile;
@@ -165,14 +166,22 @@ export default function CandidateDetailModal({
                   </svg>
                   Why the Fit
                 </h3>
-                {profile.score !== undefined && (
-                  <div className="text-right">
-                    <div className="text-3xl font-bold gradient-text">
-                      {Math.round(profile.score * 100)}%
+                {profile.score !== undefined && (() => {
+                  const scorePercent = scoreToPercentage(profile.score);
+                  const tier = getTierForScore(scorePercent);
+                  const displayScore = scorePercent >= 100 || scorePercent < 0 ? 'Matched' : `${scorePercent}%`;
+                  return (
+                    <div className="text-right">
+                      <div
+                        className="text-3xl font-bold"
+                        style={{ color: tier.color }}
+                      >
+                        {displayScore}
+                      </div>
+                      <div className="text-xs text-white/50">Match Status</div>
                     </div>
-                    <div className="text-xs text-white/50">Match Score</div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
               {searchQuery && (
                 <p className="text-white/50 text-sm mb-2">

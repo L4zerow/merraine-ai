@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPearchClient, SearchParams, calculateSearchCost, Profile } from '@/lib/pearch';
+import { createPearchClient, SearchParams, calculateSearchCost, Profile, CustomFilters } from '@/lib/pearch';
 
 const apiKey = process.env.PEARCH_API_KEY;
 
@@ -7,10 +7,15 @@ interface TransformedResult {
   profiles: Profile[];
   thread_id?: string;
   credits_used?: number;
+  total_count?: number;  // For pagination
 }
 
 function transformSearchResults(apiResponse: Record<string, unknown>): TransformedResult {
-  const searchResults = apiResponse.search_results as Array<{ docid: string; profile: Record<string, unknown> }> || [];
+  const searchResults = apiResponse.search_results as Array<{
+    docid: string;
+    profile: Record<string, unknown>;
+    score?: number;  // Score is at result level, not profile level
+  }> || [];
 
   const profiles: Profile[] = searchResults.map((result) => {
     const p = result.profile || {};
@@ -18,6 +23,10 @@ function transformSearchResults(apiResponse: Record<string, unknown>): Transform
     const firstName = p.first_name as string || '';
     const lastName = p.last_name as string || '';
     const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown';
+
+    // Score is at the result level (search relevance), not inside profile
+    // Check both locations for compatibility
+    const score = result.score ?? (p.score as number | undefined);
 
     return {
       id: (p.docid || p.linkedin_slug || result.docid) as string,
@@ -31,7 +40,7 @@ function transformSearchResults(apiResponse: Record<string, unknown>): Transform
       linkedin_url: p.linkedin_slug
         ? `https://linkedin.com/in/${p.linkedin_slug}`
         : p.linkedin_url as string || '',
-      score: p.score as number,
+      score,
       insights: p.insights as string || '',
       experience: p.experience as Profile['experience'] || [],
       education: p.education as Profile['education'] || [],
@@ -43,6 +52,7 @@ function transformSearchResults(apiResponse: Record<string, unknown>): Transform
     profiles,
     thread_id: apiResponse.thread_id as string,
     credits_used: apiResponse.credits_used as number | undefined,
+    total_count: apiResponse.total_count as number | undefined,
   };
 }
 

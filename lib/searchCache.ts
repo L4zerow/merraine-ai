@@ -8,6 +8,7 @@ const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour in milliseconds
 
 export interface SearchCache {
   query: string;
+  location?: string;  // Location filter
   results: Profile[];
   threadId: string | null;
   options: {

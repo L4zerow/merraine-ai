@@ -2,6 +2,25 @@
 
 const PEARCH_API_BASE = 'https://api.pearch.ai';
 
+export interface CustomFilters {
+  locations?: string[];
+  keywords?: string[];  // Skills/keywords
+  titles?: string[];
+  industries?: string[];
+  companies?: string[];
+  min_total_experience_years?: number;
+  max_total_experience_years?: number;
+  min_current_experience_years?: number;
+  max_current_experience_years?: number;
+  universities?: string[];
+  degrees?: ('bachelor' | 'master' | 'MBA' | 'doctor' | 'postdoc')[];
+  languages?: string[];
+  has_startup_experience?: boolean;
+  has_saas_experience?: boolean;
+  has_b2b_experience?: boolean;
+  has_b2c_experience?: boolean;
+}
+
 export interface SearchParams {
   query: string;
   type?: 'pro' | 'fast';
@@ -12,6 +31,14 @@ export interface SearchParams {
   reveal_phones?: boolean;
   thread_id?: string;
   limit?: number;
+  // New: Server-side filtering capabilities
+  custom_filters?: CustomFilters;
+  offset?: number;  // For pagination
+  docid_blacklist?: string[];  // For deduplication
+  strict_filters?: boolean;  // Exact match vs fuzzy
+  filter_out_no_emails?: boolean;
+  filter_out_no_phones?: boolean;
+  filter_out_no_phones_or_emails?: boolean;
 }
 
 export interface EnrichParams {
@@ -126,7 +153,7 @@ class PearchClient {
 
   async enrichProfile(params: EnrichParams): Promise<Profile> {
     const queryParams = new URLSearchParams();
-    queryParams.set('id', params.id);
+    queryParams.set('docid', params.id);  // Pearch API expects 'docid', not 'id'
     if (params.high_freshness) queryParams.set('high_freshness', 'true');
     if (params.reveal_emails) queryParams.set('reveal_emails', 'true');
     if (params.reveal_phones) queryParams.set('reveal_phones', 'true');

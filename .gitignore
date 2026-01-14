@@ -41,3 +41,7 @@ next-env.d.ts
 .call_count
 .last_reset
 status.json
+
+# Environment files with secrets
+.env.local
+.env*.local

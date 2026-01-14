@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
 import { Profile, calculateSearchCost } from '@/lib/pearch';
 import { logCreditUsage, canAfford, getRemainingCredits } from '@/lib/credits';
 import { useCreditUpdate } from '@/components/CreditTracker';
 import { saveCandidate, isCandidateSaved, getSavedCount } from '@/lib/savedCandidates';
 import CandidateDetailModal from '@/components/CandidateDetailModal';
+import CandidateTable from '@/components/search/CandidateTable';
+import { getTierCounts, groupByTier } from '@/lib/searchResultsUtils';
 import {
   saveSearchCache,
   loadSearchCache,
@@ -26,10 +28,13 @@ interface SearchOptions {
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
+  const [location, setLocation] = useState(''); // New: explicit location filter
+  const [activeQuery, setActiveQuery] = useState(''); // Track query for current results
+  const [activeLocation, setActiveLocation] = useState(''); // Track location for current results
   const [options, setOptions] = useState<SearchOptions>({
     type: 'fast',
     insights: false,
-    profile_scoring: false,
+    profile_scoring: false,  // Disabled by default - Pearch API currently returns same score for all results
     high_freshness: false,
     reveal_emails: false,
     reveal_phones: false,
@@ -42,14 +47,26 @@ export default function SearchPage() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [cacheAge, setCacheAge] = useState<number | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false); // Track if "Load More" was clicked
+  const [remainingCredits, setRemainingCredits] = useState<number | null>(null); // null until client loads
 
   const triggerCreditUpdate = useCreditUpdate();
+
+  // Load credits on client only (avoids hydration mismatch)
+  useEffect(() => {
+    setRemainingCredits(getRemainingCredits());
+  }, []);
 
   // Load cached search results on mount
   useEffect(() => {
     const cached = loadSearchCache();
     if (cached) {
       setQuery(cached.query);
+      setActiveQuery(cached.query); // Track that these results belong to this query
+      if (cached.location) {
+        setLocation(cached.location);
+        setActiveLocation(cached.location);
+      }
       setOptions(cached.options);
       setResults(cached.results);
       setThreadId(cached.threadId);
@@ -99,30 +116,48 @@ export default function SearchPage() {
 
   const costPerProfile = getCostPerProfile();
   const estimatedCost = costPerProfile * options.limit;
-  const remainingCredits = typeof window !== 'undefined' ? getRemainingCredits() : 5000;
+  // remainingCredits is now loaded via useEffect to avoid hydration mismatch
 
-  const handleSearch = async () => {
+  const handleSearch = async (loadMore = false) => {
     if (!query.trim()) {
       setError('Please enter a search query');
       return;
     }
 
     if (!canAfford(estimatedCost)) {
-      setError(`Not enough credits. You need ${estimatedCost} but have ${remainingCredits}.`);
+      const currentCredits = getRemainingCredits();
+      setError(`Not enough credits. You need ${estimatedCost} but have ${currentCredits}.`);
       return;
     }
 
+    // Determine if this is a fresh search or loading more
+    const isNewSearch = !loadMore || query !== activeQuery || location !== activeLocation;
+
     setLoading(true);
+    if (loadMore) setIsLoadingMore(true);
     setError(null);
 
+    // Clear previous results for fresh searches
+    if (isNewSearch) {
+      setResults([]);
+      setThreadId(null);
+    }
+
     try {
+      // Build custom_filters for location
+      const custom_filters: Record<string, string[]> = {};
+      if (location.trim()) {
+        custom_filters.locations = [location.trim()];
+      }
+
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           query,
           ...options,
-          thread_id: threadId,
+          thread_id: isNewSearch ? undefined : threadId, // Only pass threadId for "Load More"
+          custom_filters: Object.keys(custom_filters).length > 0 ? custom_filters : undefined,
         }),
       });
 
@@ -133,29 +168,36 @@ export default function SearchPage() {
       }
 
       const newProfiles = data.profiles || [];
-      const allResults = threadId ? [...results, ...newProfiles] : newProfiles;
+      // Only append for "Load More", replace for new searches
+      const allResults = isNewSearch ? newProfiles : [...results, ...newProfiles];
       const newThreadId = data.thread_id || null;
 
       setResults(allResults);
       setThreadId(newThreadId);
+      setActiveQuery(query); // Track what query these results are for
+      setActiveLocation(location); // Track what location these results are for
       setCacheAge(0); // Fresh results
 
       // Save to cache for persistence
       saveSearchCache({
         query,
+        location: location.trim() || undefined,
         results: allResults,
         threadId: newThreadId,
         options,
       });
 
       // Log actual credit usage from API response, fallback to estimate
-      const actualCost = data.credits_used ?? (newProfiles.length * costPerProfile);
+      // Use explicit undefined check since credits_used: 0 is valid
+      const actualCost = data.credits_used !== undefined ? data.credits_used : (newProfiles.length * costPerProfile);
       logCreditUsage('Search', actualCost, `${newProfiles.length} profiles`);
       triggerCreditUpdate();
+      setRemainingCredits(getRemainingCredits()); // Update local state
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
     } finally {
       setLoading(false);
+      setIsLoadingMore(false);
     }
   };
 
@@ -181,12 +223,29 @@ export default function SearchPage() {
       {/* Search Bar */}
       <GlassCard>
         <div className="space-y-4">
-          <GlassInput
-            placeholder="e.g., Senior React developer with 5+ years experience in San Francisco"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          />
+          <div>
+            <div className="text-xs text-white/50 mb-2">Search Query</div>
+            <GlassInput
+              placeholder="e.g., Senior React developer with 5+ years experience"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && handleSearch()}
+            />
+          </div>
+
+          {/* Location Filter - Uses Pearch API's custom_filters.locations */}
+          <div>
+            <div className="text-xs text-white/50 mb-2">Location Filter (optional)</div>
+            <GlassInput
+              placeholder="e.g., Ohio, USA or San Francisco, CA"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !loading && handleSearch()}
+            />
+            <div className="text-xs text-white/30 mt-1">
+              Enter a specific location to filter results. This is passed directly to the API for accurate filtering.
+            </div>
+          </div>
 
           {/* Search Type */}
           <div>
@@ -229,14 +288,7 @@ export default function SearchPage() {
               >
                 AI Insights <span className="opacity-70">+1</span>
               </button>
-              <button
-                onClick={() => toggleOption('profile_scoring')}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
-                  options.profile_scoring ? 'bg-[#30D158] text-white' : 'bg-white/10 text-white/70 hover:bg-white/15'
-                }`}
-              >
-                Match Scoring <span className="opacity-70">+1</span>
-              </button>
+              {/* Match Scoring removed - Pearch API returns same score for all results, no value for extra cost */}
               <button
                 onClick={() => toggleOption('high_freshness')}
                 className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
@@ -303,7 +355,7 @@ export default function SearchPage() {
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-white/10">
               <span className="text-white font-medium">Estimated total:</span>
-              <span className={`text-lg font-bold ${estimatedCost > remainingCredits ? 'text-red-400' : 'text-[#30D158]'}`}>
+              <span className={`text-lg font-bold ${remainingCredits !== null && estimatedCost > remainingCredits ? 'text-red-400' : 'text-[#30D158]'}`}>
                 {estimatedCost} credits
               </span>
             </div>
@@ -311,13 +363,13 @@ export default function SearchPage() {
 
           <div className="flex items-center justify-between">
             <div className="text-sm text-white/50">
-              You have <span className="text-white">{remainingCredits}</span> credits remaining
+              You have <span className="text-white">{remainingCredits ?? '...'}</span> credits remaining
             </div>
             <GlassButton
               variant="primary"
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               loading={loading}
-              disabled={!query.trim() || estimatedCost > remainingCredits}
+              disabled={!query.trim() || (remainingCredits !== null && estimatedCost > remainingCredits)}
             >
               Search Candidates
             </GlassButton>
@@ -359,126 +411,20 @@ export default function SearchPage() {
                 Clear
               </button>
               {threadId && (
-                <GlassButton onClick={handleSearch} loading={loading} size="sm">
+                <GlassButton onClick={() => handleSearch(true)} loading={loading && isLoadingMore} size="sm">
                   Load More
                 </GlassButton>
               )}
             </div>
           </div>
 
-          <div className="grid gap-4">
-            {results.map((profile, index) => (
-              <GlassCard
-                key={profile.id || index}
-                hover
-                onClick={() => setSelectedProfile(profile)}
-                className="cursor-pointer"
-              >
-                <div className="flex items-start gap-4">
-                  {profile.picture_url ? (
-                    <img
-                      src={profile.picture_url}
-                      alt={profile.name || 'Profile'}
-                      className="w-14 h-14 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                      {profile.name?.charAt(0) || '?'}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-semibold text-white">{profile.name || 'Unknown'}</h3>
-                    <p className="text-white/70 text-sm">{profile.headline || 'No headline'}</p>
-                    <p className="text-white/50 text-sm">{profile.location || 'Location unknown'}</p>
-
-                    {profile.skills && profile.skills.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {profile.skills.slice(0, 5).map((skill, i) => (
-                          <span key={i} className="px-2 py-0.5 bg-white/10 rounded text-xs text-white/70">
-                            {skill}
-                          </span>
-                        ))}
-                        {profile.skills.length > 5 && (
-                          <span className="px-2 py-0.5 text-xs text-white/50">
-                            +{profile.skills.length - 5} more
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {profile.insights && (
-                      <p className="text-sm text-white/60 mt-2 italic">{profile.insights}</p>
-                    )}
-
-                    <div className="flex gap-4 mt-3" onClick={(e) => e.stopPropagation()}>
-                      {profile.email && (
-                        <a href={`mailto:${profile.email}`} className="text-[#0A84FF] text-sm hover:underline flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                          {profile.email}
-                        </a>
-                      )}
-                      {profile.phone && (
-                        <a href={`tel:${profile.phone}`} className="text-[#FF9500] text-sm hover:underline flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                          {profile.phone}
-                        </a>
-                      )}
-                      {profile.linkedin_url && (
-                        <a href={profile.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-[#0A84FF] text-sm hover:underline flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                          </svg>
-                          LinkedIn
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    {profile.score !== undefined && (
-                      <div className="text-right">
-                        <div className="text-2xl font-bold gradient-text">
-                          {Math.round(profile.score * 100)}%
-                        </div>
-                        <div className="text-xs text-white/50">Match</div>
-                      </div>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSaveCandidate(profile);
-                      }}
-                      disabled={!profile.id || savedIds.has(profile.id)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
-                        profile.id && savedIds.has(profile.id)
-                          ? 'bg-[#30D158]/20 text-[#30D158] cursor-default'
-                          : 'bg-white/10 text-white hover:bg-white/20'
-                      }`}
-                    >
-                      {profile.id && savedIds.has(profile.id) ? (
-                        <>
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
-                          </svg>
-                          Saved
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                          </svg>
-                          Save
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </GlassCard>
-            ))}
-          </div>
+          {/* Dashboard Table View - Grouped by Match Score Tiers */}
+          <CandidateTable
+            profiles={results}
+            onSelectCandidate={setSelectedProfile}
+            onSaveCandidate={handleSaveCandidate}
+            savedIds={savedIds}
+          />
         </div>
       )}
 
