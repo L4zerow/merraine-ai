@@ -33,14 +33,27 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Ralph
+# Ralph / Development state
 .ralph_session
 .ralph_session_history
 .circuit_breaker_state
 .circuit_breaker_history
 .call_count
 .last_reset
+.exit_signals
+.response_analysis
 status.json
+
+# Claude Code
+.claude/
+
+# Test directories
+Job Tests/
+
+# Development artifacts
+@AGENT.md
+PROMPT.md
+PROJECT_ESSENCE.md
 
 # Environment files with secrets
 .env.local
