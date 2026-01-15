@@ -2,6 +2,8 @@
 
 A modern, AI-powered recruiting platform that helps recruiters find qualified candidates using natural language search. Built on the [Pearch AI](https://pearch.ai) API.
 
+![System Architecture](docs/merraine-architecture.png)
+
 ## Overview
 
 Merraine AI streamlines the candidate sourcing process by allowing recruiters to search for candidates using plain English queries like *"Senior React developers in Austin with startup experience"* instead of complex boolean searches. The platform provides transparent credit tracking, candidate management, and multiple export formats for seamless integration with existing workflows.
@@ -144,6 +146,8 @@ All API calls are proxied through Next.js API routes for security.
 | `AUTH_PASSWORD` | Yes | Login password |
 
 ## Usage
+
+![Recruiter Workflow](docs/merraine-workflow.png)
 
 ### Basic Search
 
