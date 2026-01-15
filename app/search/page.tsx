@@ -15,6 +15,11 @@ import {
   clearSearchCache,
   getSearchCacheAge,
 } from '@/lib/searchCache';
+import {
+  exportSearchResultsToCSV,
+  exportSearchResultsToMarkdown,
+  exportSearchResultsToJSON,
+} from '@/lib/exportSearchResults';
 
 interface SearchOptions {
   type: 'fast' | 'pro';
@@ -50,6 +55,7 @@ export default function SearchPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false); // Track if "Load More" was clicked
   const [remainingCredits, setRemainingCredits] = useState<number | null>(null); // null until client loads
   const [jobContext, setJobContext] = useState<{ jobId: string; jobTitle: string } | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const triggerCreditUpdate = useCreditUpdate();
 
@@ -102,6 +108,7 @@ export default function SearchPage() {
     setSavedIds(newSavedIds);
   }, [results]);
 
+  
   // Clear results and cache
   const handleClearResults = () => {
     setResults([]);
@@ -448,6 +455,16 @@ export default function SearchPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {/* Export Button */}
+              <button
+                onClick={() => setShowExportMenu(true)}
+                className="px-3 py-1.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Export
+              </button>
               <button
                 onClick={handleClearResults}
                 className="px-3 py-1.5 text-sm text-white/50 hover:text-white/80 hover:bg-white/5 rounded-lg transition-colors"
@@ -492,6 +509,68 @@ export default function SearchPage() {
           onSave={handleSaveCandidate}
           isSaved={selectedProfile.id ? savedIds.has(selectedProfile.id) : false}
         />
+      )}
+
+      {/* Export Modal */}
+      {showExportMenu && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setShowExportMenu(false)}
+          />
+          <div className="relative bg-[#1c1c1e] rounded-2xl p-6 w-80 shadow-2xl border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Export {results.length} Candidates</h3>
+              <button
+                onClick={() => setShowExportMenu(false)}
+                className="text-white/40 hover:text-white/70 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-white/50 text-sm mb-4">Choose a format to export your search results:</p>
+            <div className="space-y-2">
+              <button
+                onClick={() => { exportSearchResultsToCSV(results, activeQuery); setShowExportMenu(false); }}
+                className="w-full px-4 py-3 text-left bg-white/5 hover:bg-white/10 rounded-xl transition-colors flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[#30D158] font-medium">CSV</div>
+                  <div className="text-white/50 text-sm">Excel, Google Sheets</div>
+                </div>
+                <svg className="w-5 h-5 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => { exportSearchResultsToMarkdown(results, activeQuery); setShowExportMenu(false); }}
+                className="w-full px-4 py-3 text-left bg-white/5 hover:bg-white/10 rounded-xl transition-colors flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[#0A84FF] font-medium">Markdown</div>
+                  <div className="text-white/50 text-sm">Documentation, Notes</div>
+                </div>
+                <svg className="w-5 h-5 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => { exportSearchResultsToJSON(results, activeQuery); setShowExportMenu(false); }}
+                className="w-full px-4 py-3 text-left bg-white/5 hover:bg-white/10 rounded-xl transition-colors flex items-center justify-between"
+              >
+                <div>
+                  <div className="text-[#FF9500] font-medium">JSON</div>
+                  <div className="text-white/50 text-sm">Data transfer, APIs</div>
+                </div>
+                <svg className="w-5 h-5 text-white/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
