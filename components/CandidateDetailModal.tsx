@@ -11,6 +11,7 @@ interface CandidateDetailModalProps {
   searchQuery?: string;
   onClose: () => void;
   onSave?: (profile: Profile) => void;
+  onFindSimilar?: (profile: Profile) => void;
   isSaved?: boolean;
 }
 
@@ -19,6 +20,7 @@ export default function CandidateDetailModal({
   searchQuery,
   onClose,
   onSave,
+  onFindSimilar,
   isSaved = false,
 }: CandidateDetailModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -298,33 +300,46 @@ export default function CandidateDetailModal({
           <GlassButton onClick={onClose}>
             Close
           </GlassButton>
-          {onSave && (
-            <button
-              onClick={() => onSave(profile)}
-              disabled={isSaved}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-                isSaved
-                  ? 'bg-[#30D158]/20 text-[#30D158] cursor-default'
-                  : 'bg-[#0A84FF] text-white hover:bg-[#0A84FF]/80'
-              }`}
-            >
-              {isSaved ? (
-                <>
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
-                  </svg>
-                  Saved to Candidates
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                  </svg>
-                  Save Candidate
-                </>
-              )}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {onFindSimilar && (
+              <button
+                onClick={() => onFindSimilar(profile)}
+                className="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 bg-white/10 text-white hover:bg-white/20"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                Find Similar
+              </button>
+            )}
+            {onSave && (
+              <button
+                onClick={() => onSave(profile)}
+                disabled={isSaved}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                  isSaved
+                    ? 'bg-[#30D158]/20 text-[#30D158] cursor-default'
+                    : 'bg-[#0A84FF] text-white hover:bg-[#0A84FF]/80'
+                }`}
+              >
+                {isSaved ? (
+                  <>
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+                    </svg>
+                    Saved to Candidates
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    Save Candidate
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

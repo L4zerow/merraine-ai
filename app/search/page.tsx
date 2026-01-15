@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
 import { Profile, calculateSearchCost } from '@/lib/pearch';
+import { buildSimilarSearchParams } from '@/lib/findSimilar';
 import { logCreditUsage, canAfford, getRemainingCredits } from '@/lib/credits';
 import { useCreditUpdate } from '@/components/CreditTracker';
 import { saveCandidate, isCandidateSaved, getSavedCount } from '@/lib/savedCandidates';
@@ -108,7 +109,24 @@ export default function SearchPage() {
     setSavedIds(newSavedIds);
   }, [results]);
 
-  
+  // Handle "Find Similar" from candidate modal
+  const handleFindSimilar = (profile: Profile) => {
+    const params = buildSimilarSearchParams(profile);
+
+    // Close the modal immediately
+    setSelectedProfile(null);
+
+    // Update form state so UI shows what was searched
+    setQuery(params.query);
+    setLocation(params.location);
+
+    // Clear cache since this is a new search context
+    clearSearchCache();
+
+    // Run the search immediately with the params (bypasses async state)
+    handleSearch(false, params);
+  };
+
   // Clear results and cache
   const handleClearResults = () => {
     setResults([]);
@@ -142,8 +160,12 @@ export default function SearchPage() {
   const estimatedCost = costPerProfile * options.limit;
   // remainingCredits is now loaded via useEffect to avoid hydration mismatch
 
-  const handleSearch = async (loadMore = false) => {
-    if (!query.trim()) {
+  const handleSearch = async (loadMore = false, overrideParams?: { query: string; location: string }) => {
+    // Use override params if provided (for Find Similar), otherwise use state
+    const searchQuery = overrideParams?.query ?? query;
+    const searchLocation = overrideParams?.location ?? location;
+
+    if (!searchQuery.trim()) {
       setError('Please enter a search query');
       return;
     }
@@ -155,7 +177,7 @@ export default function SearchPage() {
     }
 
     // Determine if this is a fresh search or loading more
-    const isNewSearch = !loadMore || query !== activeQuery || location !== activeLocation;
+    const isNewSearch = !loadMore || searchQuery !== activeQuery || searchLocation !== activeLocation;
 
     setLoading(true);
     if (loadMore) setIsLoadingMore(true);
@@ -170,15 +192,15 @@ export default function SearchPage() {
     try {
       // Build custom_filters for location
       const custom_filters: Record<string, string[]> = {};
-      if (location.trim()) {
-        custom_filters.locations = [location.trim()];
+      if (searchLocation.trim()) {
+        custom_filters.locations = [searchLocation.trim()];
       }
 
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query,
+          query: searchQuery,
           ...options,
           thread_id: isNewSearch ? undefined : threadId, // Only pass threadId for "Load More"
           custom_filters: Object.keys(custom_filters).length > 0 ? custom_filters : undefined,
@@ -198,14 +220,14 @@ export default function SearchPage() {
 
       setResults(allResults);
       setThreadId(newThreadId);
-      setActiveQuery(query); // Track what query these results are for
-      setActiveLocation(location); // Track what location these results are for
+      setActiveQuery(searchQuery); // Track what query these results are for
+      setActiveLocation(searchLocation); // Track what location these results are for
       setCacheAge(0); // Fresh results
 
       // Save to cache for persistence
       saveSearchCache({
-        query,
-        location: location.trim() || undefined,
+        query: searchQuery,
+        location: searchLocation.trim() || undefined,
         results: allResults,
         threadId: newThreadId,
         options,
@@ -507,6 +529,7 @@ export default function SearchPage() {
           searchQuery={query}
           onClose={() => setSelectedProfile(null)}
           onSave={handleSaveCandidate}
+          onFindSimilar={handleFindSimilar}
           isSaved={selectedProfile.id ? savedIds.has(selectedProfile.id) : false}
         />
       )}
