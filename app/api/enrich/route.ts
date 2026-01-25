@@ -1,11 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { createPearchClient, EnrichParams, calculateEnrichCost } from '@/lib/pearch';
+import { rateLimit, getIdentifier, createRateLimitHeaders } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
 const apiKey = process.env.PEARCH_API_KEY;
 
 export async function GET(request: NextRequest) {
+  // Verify authentication
+  const cookieStore = cookies();
+  const authCookie = cookieStore.get('merraine-auth');
+  if (authCookie?.value !== 'authenticated') {
+    return NextResponse.json(
+      { error: 'Unauthorized - Please log in' },
+      { status: 401 }
+    );
+  }
+
+  // Rate limiting: 30 enrichments per minute (higher than search since these are quick)
+  const identifier = getIdentifier(request);
+  const rateLimitResult = rateLimit(identifier, { limit: 30, windowMs: 60000 });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      {
+        error: 'Too many requests. Please wait before enriching profiles again.',
+        retryAfter: Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000),
+      },
+      {
+        status: 429,
+        headers: createRateLimitHeaders(rateLimitResult, 30),
+      }
+    );
+  }
+
   if (!apiKey) {
     return NextResponse.json(
       { error: 'API key not configured' },
@@ -33,6 +62,18 @@ export async function GET(request: NextRequest) {
     };
 
     const estimatedCost = calculateEnrichCost(params);
+
+    // Log enrich request for audit trail
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      endpoint: '/api/enrich',
+      profileId: id?.substring(0, 20),
+      highFreshness: params.high_freshness,
+      revealEmails: params.reveal_emails,
+      revealPhones: params.reveal_phones,
+      estimatedCost,
+      ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+    }));
 
     const client = createPearchClient(apiKey);
     const result = await client.enrichProfile(params);
