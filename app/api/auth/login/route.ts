@@ -18,8 +18,16 @@ export async function POST(request: NextRequest) {
 
     const { username, password } = await request.json();
 
+    // Debug logging (remove after fixing)
+    console.log('Login attempt:', {
+      providedUsername: username,
+      expectedUsername: VALID_USERNAME,
+      usernameMatch: username === VALID_USERNAME,
+      passwordMatch: password === VALID_PASSWORD
+    });
+
     if (username === VALID_USERNAME && password === VALID_PASSWORD) {
-      const cookieStore = await cookies();
+      const cookieStore = cookies();
       cookieStore.set('merraine-auth', 'authenticated', {
         httpOnly: true,
         secure: true,  // Always require HTTPS
