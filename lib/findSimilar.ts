@@ -21,7 +21,17 @@ export interface SimilarSearchParams {
  */
 export function buildSimilarSearchParams(profile: Profile): SimilarSearchParams {
   // Start with the job title/headline - this is the core of "similar"
-  const headline = profile.headline?.trim() || '';
+  let headline = profile.headline?.trim() || '';
+
+  // Remove company name from headline (e.g., "CEO at Company" -> "CEO")
+  // LinkedIn format is typically "Job Title at Company Name"
+  if (headline.includes(' at ')) {
+    headline = headline.split(' at ')[0].trim();
+  }
+  // Also handle "Job Title @ Company" format
+  if (headline.includes(' @ ')) {
+    headline = headline.split(' @ ')[0].trim();
+  }
 
   // Extract top skills (limit to 5 to keep query focused)
   const skills = profile.skills?.slice(0, 5) || [];
