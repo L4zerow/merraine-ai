@@ -207,7 +207,12 @@ export default function SearchPage() {
         }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Search failed — please try again');
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Search failed');

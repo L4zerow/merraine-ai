@@ -12,6 +12,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Return JSON 401 for API routes instead of redirecting (prevents non-JSON responses)
+  if (request.nextUrl.pathname.startsWith('/api/') && !isAuthenticated) {
+    return NextResponse.json(
+      { error: 'Unauthorized - Please log in' },
+      { status: 401 }
+    );
+  }
+
   // Redirect authenticated users away from login page
   if (isLoginPage && isAuthenticated) {
     return NextResponse.redirect(new URL('/', request.url));
