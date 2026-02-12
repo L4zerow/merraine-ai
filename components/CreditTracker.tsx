@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getStoredCredits, getWarningLevel, getRemainingCredits, CreditState } from '@/lib/credits';
+import { getStoredCredits, getWarningLevel, getRemainingCredits, updatePearchBalance, CreditState } from '@/lib/credits';
 
 export default function CreditTracker() {
   const [credits, setCredits] = useState<CreditState | null>(null);
@@ -13,6 +13,17 @@ export default function CreditTracker() {
     };
 
     loadCredits();
+
+    // Sync real balance from DB on every page navigation
+    fetch('/api/credits/balance')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.credits_remaining != null) {
+          updatePearchBalance(data.credits_remaining);
+          loadCredits();
+        }
+      })
+      .catch(() => {});
 
     const handleCreditUpdate = () => loadCredits();
     window.addEventListener('creditUpdate', handleCreditUpdate);

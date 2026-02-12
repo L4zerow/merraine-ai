@@ -24,22 +24,20 @@ export default function Dashboard() {
       })
       .catch(() => {});
 
-    // Sync Pearch balance on first load if we don't have it
-    const credits = getStoredCredits();
-    if (credits.ppiBalance === null) {
-      setSyncing(true);
-      fetch('/api/credits/balance')
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data?.credits_remaining !== undefined) {
-            updatePearchBalance(data.credits_remaining);
-            setRemaining(data.credits_remaining);
-            window.dispatchEvent(new CustomEvent('creditUpdate'));
-          }
-        })
-        .catch(() => {})
-        .finally(() => setSyncing(false));
-    }
+    // Always sync Pearch balance from DB on load
+    // localStorage may be stale if another user ran a search
+    setSyncing(true);
+    fetch('/api/credits/balance')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.credits_remaining != null) {
+          updatePearchBalance(data.credits_remaining);
+          setRemaining(data.credits_remaining);
+          window.dispatchEvent(new CustomEvent('creditUpdate'));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSyncing(false));
 
     const handleUpdate = () => {
       setRemaining(getRemainingCredits());
