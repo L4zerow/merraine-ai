@@ -12,6 +12,7 @@ interface CandidateDetailModalProps {
   onClose: () => void;
   onSave?: (profile: Profile) => void;
   onFindSimilar?: (profile: Profile) => void;
+  onProfileUpdate?: (profile: Profile) => void;
   isSaved?: boolean;
 }
 
@@ -21,10 +22,74 @@ export default function CandidateDetailModal({
   onClose,
   onSave,
   onFindSimilar,
+  onProfileUpdate,
   isSaved = false,
 }: CandidateDetailModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
+  const [enrichingEmail, setEnrichingEmail] = useState(false);
+  const [enrichingPhone, setEnrichingPhone] = useState(false);
+  const [enrichedEmail, setEnrichedEmail] = useState<string | null>(profile.email || null);
+  const [enrichedPhone, setEnrichedPhone] = useState<string | null>(profile.phone || null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+
+  const handleEnrich = async (type: 'email' | 'phone' | 'both') => {
+    if (!profile.id) return;
+
+    const wantEmail = type === 'email' || type === 'both';
+    const wantPhone = type === 'phone' || type === 'both';
+
+    if (wantEmail) setEnrichingEmail(true);
+    if (wantPhone) setEnrichingPhone(true);
+    setEnrichError(null);
+
+    try {
+      const params = new URLSearchParams({ id: profile.id });
+      if (wantEmail) params.set('reveal_emails', 'true');
+      if (wantPhone) params.set('reveal_phones', 'true');
+      params.set('with_profile', 'true');
+
+      const response = await fetch(`/api/enrich?${params.toString()}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Enrichment failed');
+      }
+
+      // Extract email/phone from response
+      const email = data.email || (data.emails as string[])?.[0] || null;
+      const phone = data.phone || (data.phones as string[])?.[0] || null;
+
+      if (wantEmail && email) setEnrichedEmail(email);
+      if (wantPhone && phone) setEnrichedPhone(phone);
+
+      // Notify parent to update profile in results
+      if (onProfileUpdate) {
+        onProfileUpdate({
+          ...profile,
+          email: email || profile.email,
+          phone: phone || profile.phone,
+        });
+      }
+
+      // Update credit balance from Pearch response
+      const { logCreditUsage, updatePearchBalance } = await import('@/lib/credits');
+      if (data.credits_remaining !== undefined) {
+        updatePearchBalance(data.credits_remaining);
+      }
+      const cost = data.estimatedCost || 0;
+      if (cost > 0) {
+        logCreditUsage('Enrich', cost, `${type} for ${profile.name}`);
+      }
+      // Trigger credit display update
+      window.dispatchEvent(new CustomEvent('creditUpdate'));
+    } catch (err) {
+      setEnrichError(err instanceof Error ? err.message : 'Enrichment failed');
+    } finally {
+      setEnrichingEmail(false);
+      setEnrichingPhone(false);
+    }
+  };
 
   // Wait for client-side mount before rendering portal
   useEffect(() => {
@@ -114,7 +179,7 @@ export default function CandidateDetailModal({
                 {profile.location || 'Location unknown'}
               </p>
 
-              {/* Action Buttons */}
+              {/* Action Buttons + Contact Info */}
               <div className="flex flex-wrap gap-2 mt-3">
                 {profile.linkedin_url && (
                   <a
@@ -129,29 +194,60 @@ export default function CandidateDetailModal({
                     View LinkedIn
                   </a>
                 )}
-                {profile.email && (
+
+                {/* Email: show if available, else show Get Email button */}
+                {enrichedEmail ? (
                   <a
-                    href={`mailto:${profile.email}`}
+                    href={`mailto:${enrichedEmail}`}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    {profile.email}
+                    {enrichedEmail}
                   </a>
+                ) : (
+                  <button
+                    onClick={() => handleEnrich('email')}
+                    disabled={enrichingEmail}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0A84FF]/20 text-[#0A84FF] text-sm font-medium hover:bg-[#0A84FF]/30 transition-colors border border-[#0A84FF]/30 disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    {enrichingEmail ? 'Getting...' : 'Get Email'} <span className="opacity-70 text-xs">3 credits</span>
+                  </button>
                 )}
-                {profile.phone && (
+
+                {/* Phone: show if available, else show Get Phone button */}
+                {enrichedPhone ? (
                   <a
-                    href={`tel:${profile.phone}`}
+                    href={`tel:${enrichedPhone}`}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                     </svg>
-                    {profile.phone}
+                    {enrichedPhone}
                   </a>
+                ) : (
+                  <button
+                    onClick={() => handleEnrich('phone')}
+                    disabled={enrichingPhone}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FF9500]/20 text-[#FF9500] text-sm font-medium hover:bg-[#FF9500]/30 transition-colors border border-[#FF9500]/30 disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    {enrichingPhone ? 'Getting...' : 'Get Phone'} <span className="opacity-70 text-xs">15 credits</span>
+                  </button>
                 )}
               </div>
+
+              {/* Enrich Error */}
+              {enrichError && (
+                <div className="mt-2 text-xs text-red-400">{enrichError}</div>
+              )}
             </div>
           </div>
         </div>

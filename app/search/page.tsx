@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
 import { Profile, calculateSearchCost } from '@/lib/pearch';
 import { buildSimilarSearchParams } from '@/lib/findSimilar';
-import { logCreditUsage, canAfford, getRemainingCredits } from '@/lib/credits';
+import { logCreditUsage, canAfford, getRemainingCredits, updatePearchBalance } from '@/lib/credits';
 import { useCreditUpdate } from '@/components/CreditTracker';
 import { saveCandidate, isCandidateSaved, getSavedCount } from '@/lib/savedCandidates';
 import CandidateDetailModal from '@/components/CandidateDetailModal';
@@ -54,9 +54,13 @@ export default function SearchPage() {
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [cacheAge, setCacheAge] = useState<number | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false); // Track if "Load More" was clicked
-  const [remainingCredits, setRemainingCredits] = useState<number | null>(null); // null until client loads
+  const [remainingCredits, setRemainingCredits] = useState<number | null>(null); // null until Pearch balance known
   const [jobContext, setJobContext] = useState<{ jobId: string; jobTitle: string } | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState('');
+  const [savingSearch, setSavingSearch] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   const triggerCreditUpdate = useCreditUpdate();
 
@@ -145,6 +149,41 @@ export default function SearchPage() {
     });
   };
 
+  // Save search to database
+  const handleSaveSearch = async () => {
+    if (!saveSearchName.trim() || results.length === 0) return;
+
+    setSavingSearch(true);
+    try {
+      const response = await fetch('/api/searches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: saveSearchName.trim(),
+          query: activeQuery,
+          location: activeLocation || undefined,
+          options,
+          threadId,
+          creditsUsed: 0, // Already tracked on search
+          profiles: results,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to save search');
+      }
+
+      setShowSaveModal(false);
+      setSaveSuccess(`Saved "${saveSearchName.trim()}"`);
+      setTimeout(() => setSaveSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save search');
+    } finally {
+      setSavingSearch(false);
+    }
+  };
+
   // Calculate cost per profile
   const getCostPerProfile = () => {
     let cost = options.type === 'pro' ? 5 : 1;
@@ -172,7 +211,7 @@ export default function SearchPage() {
 
     if (!canAfford(estimatedCost)) {
       const currentCredits = getRemainingCredits();
-      setError(`Not enough credits. You need ${estimatedCost} but have ${currentCredits}.`);
+      setError(`Not enough credits. You need ${estimatedCost} but have ${currentCredits ?? 'unknown'}.`);
       return;
     }
 
@@ -238,10 +277,13 @@ export default function SearchPage() {
         options,
       });
 
-      // Log actual credit usage from API response, fallback to estimate
-      // Use explicit undefined check since credits_used: 0 is valid
-      const actualCost = data.credits_used !== undefined ? data.credits_used : (newProfiles.length * costPerProfile);
-      logCreditUsage('Search', actualCost, `${newProfiles.length} profiles`);
+      // Update Pearch balance from API response (source of truth)
+      if (data.credits_remaining !== undefined) {
+        updatePearchBalance(data.credits_remaining);
+      }
+      // Log estimated cost for history (Pearch credits_used is unreliable for fast search)
+      const estimatedActualCost = newProfiles.length * costPerProfile;
+      logCreditUsage('Search', estimatedActualCost, `${newProfiles.length} profiles`);
       triggerCreditUpdate();
       setRemainingCredits(getRemainingCredits()); // Update local state
     } catch (err) {
@@ -378,34 +420,21 @@ export default function SearchPage() {
             </div>
           </div>
 
-          {/* Contact Info */}
-          <div>
-            <div className="text-xs text-white/50 mb-2">Contact Information (per profile)</div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => toggleOption('reveal_emails')}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
-                  options.reveal_emails ? 'bg-[#0A84FF] text-white' : 'bg-white/10 text-white/70 hover:bg-white/15'
-                }`}
-              >
-                Reveal Emails <span className="opacity-70">+2</span>
-              </button>
-              <button
-                onClick={() => toggleOption('reveal_phones')}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
-                  options.reveal_phones ? 'bg-[#FF9500] text-white' : 'bg-white/10 text-white/70 hover:bg-white/15'
-                }`}
-              >
-                Reveal Phones <span className="text-[#FF9500]/70">+14</span>
-              </button>
+          {/* Contact Info — moved to per-candidate enrichment */}
+          <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+            <div className="flex items-center gap-2 text-white/50 text-sm">
+              <svg className="w-4 h-4 text-[#0A84FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Email and phone are available per candidate after search — click any candidate to get contact info.</span>
             </div>
           </div>
 
           {/* Results Limit */}
           <div>
             <div className="text-xs text-white/50 mb-2">Results Limit</div>
-            <div className="flex gap-2">
-              {[5, 10, 20, 50].map((num) => (
+            <div className="flex gap-2 flex-wrap">
+              {[5, 10, 20, 50, 100, 200].map((num) => (
                 <button
                   key={num}
                   onClick={() => setOptions(prev => ({ ...prev, limit: num }))}
@@ -482,6 +511,23 @@ export default function SearchPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {/* Save Search Button */}
+              <button
+                onClick={() => {
+                  setSaveSearchName(activeQuery);
+                  setShowSaveModal(true);
+                  setSaveSuccess(null);
+                }}
+                className="px-3 py-1.5 text-sm text-[#30D158] hover:text-white hover:bg-[#30D158]/20 rounded-lg transition-colors flex items-center gap-1.5 border border-[#30D158]/30"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                </svg>
+                Save Search
+              </button>
+              {saveSuccess && (
+                <span className="text-xs text-[#30D158] animate-fade-in">{saveSuccess}</span>
+              )}
               {/* Export Button */}
               <button
                 onClick={() => setShowExportMenu(true)}
@@ -535,8 +581,77 @@ export default function SearchPage() {
           onClose={() => setSelectedProfile(null)}
           onSave={handleSaveCandidate}
           onFindSimilar={handleFindSimilar}
+          onProfileUpdate={(updatedProfile) => {
+            // Update the profile in results when enrichment happens
+            setResults(prev => prev.map(p =>
+              p.id === updatedProfile.id ? updatedProfile : p
+            ));
+            setSelectedProfile(updatedProfile);
+          }}
           isSaved={selectedProfile.id ? savedIds.has(selectedProfile.id) : false}
         />
+      )}
+
+      {/* Save Search Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setShowSaveModal(false)}
+          />
+          <div className="relative bg-[#1c1c1e] rounded-2xl p-6 w-96 shadow-2xl border border-white/10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Save Search</h3>
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="text-white/40 hover:text-white/70 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-white/50 text-sm mb-4">
+              Save this search with {results.length} candidates so you can come back to it later.
+            </p>
+            <div className="mb-4">
+              <div className="text-xs text-white/50 mb-2">Search Name</div>
+              <input
+                type="text"
+                value={saveSearchName}
+                onChange={(e) => setSaveSearchName(e.target.value)}
+                placeholder="e.g., Pharmacy Directors - Ohio"
+                className="w-full px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/30 focus:outline-none focus:border-[#0A84FF] transition-colors"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && saveSearchName.trim() && !savingSearch) {
+                    handleSaveSearch();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-white/40">
+                {results.length} candidates will be saved
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowSaveModal(false)}
+                  className="px-4 py-2 rounded-xl text-sm text-white/70 hover:bg-white/10 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSearch}
+                  disabled={!saveSearchName.trim() || savingSearch}
+                  className="px-4 py-2 rounded-xl text-sm font-medium bg-[#30D158] text-white hover:bg-[#30D158]/80 transition-colors disabled:opacity-50"
+                >
+                  {savingSearch ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Export Modal */}

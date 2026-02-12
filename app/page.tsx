@@ -3,19 +3,46 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { GlassCard, GlassButton } from '@/components/ui';
-import { getStoredCredits } from '@/lib/credits';
+import { getRemainingCredits, getStoredCredits, updatePearchBalance } from '@/lib/credits';
 import { getSavedCount } from '@/lib/savedCandidates';
 
 export default function Dashboard() {
-  const [credits, setCredits] = useState({ used: 0, limit: 5000 });
+  const [remaining, setRemaining] = useState<number | null>(null);
   const [savedCount, setSavedCount] = useState(0);
+  const [searchCount, setSearchCount] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    setCredits(getStoredCredits());
+    setRemaining(getRemainingCredits());
     setSavedCount(getSavedCount());
 
+    // Fetch saved search count from DB
+    fetch('/api/searches')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.searches) setSearchCount(data.searches.length);
+      })
+      .catch(() => {});
+
+    // Sync Pearch balance on first load if we don't have it
+    const credits = getStoredCredits();
+    if (credits.ppiBalance === null) {
+      setSyncing(true);
+      fetch('/api/credits/balance')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.credits_remaining !== undefined) {
+            updatePearchBalance(data.credits_remaining);
+            setRemaining(data.credits_remaining);
+            window.dispatchEvent(new CustomEvent('creditUpdate'));
+          }
+        })
+        .catch(() => {})
+        .finally(() => setSyncing(false));
+    }
+
     const handleUpdate = () => {
-      setCredits(getStoredCredits());
+      setRemaining(getRemainingCredits());
       setSavedCount(getSavedCount());
     };
 
@@ -36,6 +63,13 @@ export default function Dashboard() {
       color: 'from-blue-500 to-cyan-500',
     },
     {
+      title: 'Saved Searches',
+      description: searchCount !== null ? `${searchCount} searches saved` : 'View saved search results',
+      href: '/searches',
+      icon: 'M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4',
+      color: 'from-green-500 to-emerald-500',
+    },
+    {
       title: 'Saved Candidates',
       description: `${savedCount} candidates saved`,
       href: '/saved',
@@ -44,27 +78,25 @@ export default function Dashboard() {
     },
   ];
 
-  const remaining = credits.limit - credits.used;
-
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <GlassCard className="text-center">
-          <div className="text-2xl font-bold text-white">{remaining}</div>
-          <div className="text-xs text-white/50">Credits Remaining</div>
+          <div className="text-2xl font-bold text-white">
+            {syncing ? '...' : remaining !== null ? remaining.toLocaleString() : '—'}
+          </div>
+          <div className="text-xs text-white/50">
+            Credits{syncing ? ' (syncing)' : ''}
+          </div>
         </GlassCard>
         <GlassCard className="text-center">
-          <div className="text-2xl font-bold text-white">{credits.used}</div>
-          <div className="text-xs text-white/50">Credits Used</div>
+          <div className="text-2xl font-bold text-white">{searchCount ?? 0}</div>
+          <div className="text-xs text-white/50">Saved Searches</div>
         </GlassCard>
         <GlassCard className="text-center">
           <div className="text-2xl font-bold text-white">{savedCount}</div>
           <div className="text-xs text-white/50">Saved Candidates</div>
-        </GlassCard>
-        <GlassCard className="text-center">
-          <div className="text-2xl font-bold text-[#30D158]">{Math.round((remaining / credits.limit) * 100)}%</div>
-          <div className="text-xs text-white/50">Budget Available</div>
         </GlassCard>
       </div>
 

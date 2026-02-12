@@ -2,21 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createPearchClient, SearchParams, calculateSearchCost, Profile, CustomFilters } from '@/lib/pearch';
 import { rateLimit, getIdentifier, createRateLimitHeaders } from '@/lib/rateLimit';
+import { saveBalance } from '@/lib/db/queries';
 
 const apiKey = process.env.PEARCH_API_KEY;
+const hasDatabase = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+const BATCH_SIZE = 50; // Pearch API max per request
 
 interface TransformedResult {
   profiles: Profile[];
   thread_id?: string;
   credits_used?: number;
-  total_count?: number;  // For pagination
+  credits_remaining?: number;
+  total_count?: number;
 }
 
 function transformSearchResults(apiResponse: Record<string, unknown>): TransformedResult {
   const searchResults = apiResponse.search_results as Array<{
     docid: string;
     profile: Record<string, unknown>;
-    score?: number;  // Score is at result level, not profile level
+    score?: number;
   }> || [];
 
   const profiles: Profile[] = searchResults.map((result) => {
@@ -26,8 +30,6 @@ function transformSearchResults(apiResponse: Record<string, unknown>): Transform
     const lastName = p.last_name as string || '';
     const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown';
 
-    // Score is at the result level (search relevance), not inside profile
-    // Check both locations for compatibility
     const score = result.score ?? (p.score as number | undefined);
 
     return {
@@ -54,7 +56,64 @@ function transformSearchResults(apiResponse: Record<string, unknown>): Transform
     profiles,
     thread_id: apiResponse.thread_id as string,
     credits_used: apiResponse.credits_used as number | undefined,
-    total_count: apiResponse.total_count as number | undefined,
+    credits_remaining: apiResponse.credits_remaining as number | undefined,
+    total_count: (apiResponse.total_estimate ?? apiResponse.total_count) as number | undefined,
+  };
+}
+
+// Auto-batch: for limits > 50, make multiple sequential Pearch API calls
+// Uses thread_id + offset for pagination (thread_id alone replays same results)
+async function batchSearch(
+  client: ReturnType<typeof createPearchClient>,
+  params: SearchParams,
+  totalLimit: number
+): Promise<TransformedResult> {
+  const allProfiles: Profile[] = [];
+  const seenIds = new Set<string>();
+  let threadId = params.thread_id;
+  let creditsRemaining: number | undefined;
+  let totalCount: number | undefined;
+  let offset = 0;
+
+  while (allProfiles.length < totalLimit) {
+    const batchLimit = Math.min(BATCH_SIZE, totalLimit - allProfiles.length);
+    const batchParams: SearchParams = {
+      ...params,
+      limit: batchLimit,
+      thread_id: threadId || undefined,
+      offset: offset > 0 ? offset : undefined,
+    };
+
+    const result = await client.search(batchParams);
+    const transformed = transformSearchResults(result as Record<string, unknown>);
+
+    // Deduplicate profiles by ID
+    const newProfiles = transformed.profiles.filter(p => {
+      if (!p.id || seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
+      return true;
+    });
+
+    allProfiles.push(...newProfiles);
+    threadId = transformed.thread_id;
+    offset += transformed.profiles.length; // Advance offset by raw count
+    if (transformed.credits_remaining !== undefined) {
+      creditsRemaining = transformed.credits_remaining;
+    }
+    if (transformed.total_count !== undefined) {
+      totalCount = transformed.total_count;
+    }
+
+    // Stop if Pearch returned fewer results than requested (pool exhausted)
+    // or no thread_id for continuation
+    if (transformed.profiles.length < batchLimit || !threadId) break;
+  }
+
+  return {
+    profiles: allProfiles,
+    thread_id: threadId,
+    credits_remaining: creditsRemaining,
+    total_count: totalCount,
   };
 }
 
@@ -103,7 +162,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const estimatedCost = calculateSearchCost(body, body.limit || 10);
+    const requestedLimit = body.limit || 10;
+    const estimatedCost = calculateSearchCost(body, requestedLimit);
 
     // Log search request for audit trail
     console.log(JSON.stringify({
@@ -112,15 +172,24 @@ export async function POST(request: NextRequest) {
       query: body.query?.substring(0, 100),
       location: body.custom_filters?.locations?.[0] || 'none',
       searchType: body.type || 'fast',
-      limit: body.limit || 10,
+      limit: requestedLimit,
       estimatedCost,
+      batched: requestedLimit > BATCH_SIZE,
       ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
     }));
 
     const client = createPearchClient(apiKey);
-    const result = await client.search(body);
 
-    const transformed = transformSearchResults(result as Record<string, unknown>);
+    let transformed: TransformedResult;
+
+    if (requestedLimit > BATCH_SIZE && !body.thread_id) {
+      // Auto-batch for large requests (new searches only, not "Load More")
+      transformed = await batchSearch(client, body, requestedLimit);
+    } else {
+      // Single request (small limit or Load More with thread_id)
+      const result = await client.search(body);
+      transformed = transformSearchResults(result as Record<string, unknown>);
+    }
 
     // Log actual credits used
     console.log(JSON.stringify({
@@ -128,8 +197,14 @@ export async function POST(request: NextRequest) {
       endpoint: '/api/search',
       query: body.query?.substring(0, 100),
       creditsUsed: transformed.credits_used || estimatedCost,
-      profilesReturned: transformed.profiles.length
+      profilesReturned: transformed.profiles.length,
+      batched: requestedLimit > BATCH_SIZE,
     }));
+
+    // Persist Pearch balance to DB for dashboard sync
+    if (hasDatabase && transformed.credits_remaining !== undefined) {
+      saveBalance(transformed.credits_remaining).catch(() => {});
+    }
 
     return NextResponse.json({
       ...transformed,

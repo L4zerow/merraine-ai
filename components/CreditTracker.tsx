@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getStoredCredits, getWarningLevel, CreditState } from '@/lib/credits';
+import { getStoredCredits, getWarningLevel, getRemainingCredits, CreditState } from '@/lib/credits';
 
 export default function CreditTracker() {
-  const [credits, setCredits] = useState<CreditState>({ used: 0, limit: 5000, logs: [] });
+  const [credits, setCredits] = useState<CreditState | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
@@ -22,9 +22,22 @@ export default function CreditTracker() {
     };
   }, []);
 
-  const remaining = credits.limit - credits.used;
-  const percentage = (credits.used / credits.limit) * 100;
-  const warningLevel = getWarningLevel(credits.used, credits.limit);
+  // Show nothing until credits load to prevent flash of wrong number
+  if (!credits) {
+    return (
+      <div className="glass-card px-4 py-2 rounded-full flex items-center gap-3 opacity-50">
+        <div className="w-2 h-2 rounded-full bg-white/30 animate-pulse" />
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-white/50">—</span>
+          <span className="text-xs text-white/50">credits</span>
+        </div>
+      </div>
+    );
+  }
+
+  const remaining = credits.ppiBalance ?? (credits.limit - credits.used);
+  const hasPearchBalance = credits.ppiBalance !== null;
+  const warningLevel = getWarningLevel(remaining);
 
   const getStatusColor = () => {
     switch (warningLevel) {
@@ -43,7 +56,7 @@ export default function CreditTracker() {
       >
         <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${getStatusColor()} animate-pulse`} />
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-white">{remaining}</span>
+          <span className="text-sm font-medium text-white">{remaining.toLocaleString()}</span>
           <span className="text-xs text-white/50">credits</span>
         </div>
       </button>
@@ -51,29 +64,17 @@ export default function CreditTracker() {
       {isExpanded && (
         <div className="absolute top-full right-0 mt-2 w-72 glass-card rounded-xl p-4 animate-fade-in z-50">
           <div className="space-y-4">
-            <h3 className="font-semibold text-white">Credit Usage</h3>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center p-3 rounded-lg bg-white/5">
-                <div className="text-2xl font-bold text-white">{credits.used}</div>
-                <div className="text-xs text-white/50">Used</div>
-              </div>
-              <div className="text-center p-3 rounded-lg bg-white/5">
-                <div className="text-2xl font-bold text-white">{remaining}</div>
-                <div className="text-xs text-white/50">Remaining</div>
-              </div>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-white">Credit Balance</h3>
+              {hasPearchBalance && (
+                <span className="text-[10px] text-emerald-400/70 bg-emerald-500/10 px-1.5 py-0.5 rounded">LIVE</span>
+              )}
             </div>
 
-            <div>
-              <div className="flex justify-between text-xs text-white/50 mb-1">
-                <span>0</span>
-                <span>{credits.limit}</span>
-              </div>
-              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className={`h-full bg-gradient-to-r ${getStatusColor()} transition-all duration-500`}
-                  style={{ width: `${Math.min(percentage, 100)}%` }}
-                />
+            <div className="text-center p-4 rounded-lg bg-white/5">
+              <div className="text-3xl font-bold text-white">{remaining.toLocaleString()}</div>
+              <div className="text-xs text-white/50 mt-1">
+                {hasPearchBalance ? 'Credits remaining' : 'Estimated credits remaining'}
               </div>
             </div>
 
@@ -83,9 +84,9 @@ export default function CreditTracker() {
                 warningLevel === 'danger' ? 'bg-orange-500/20 text-orange-300' :
                 'bg-yellow-500/20 text-yellow-300'
               }`}>
-                {warningLevel === 'critical' && 'API calls blocked to protect budget.'}
-                {warningLevel === 'danger' && 'Consider limiting API calls.'}
-                {warningLevel === 'warning' && '50% of credit limit used.'}
+                {warningLevel === 'critical' && 'Credits very low — contact admin.'}
+                {warningLevel === 'danger' && 'Credits running low.'}
+                {warningLevel === 'warning' && 'Credit balance getting low.'}
               </div>
             )}
 

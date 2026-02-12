@@ -170,7 +170,7 @@ export default function HelpPage() {
               </p>
 
               <h3 className="text-lg font-semibold text-white mt-6 mb-3">Platform Navigation</h3>
-              <p>The platform has 4 main pages:</p>
+              <p>The platform has 5 main pages:</p>
 
               <div className="grid sm:grid-cols-2 gap-4 mt-4">
                 <div className="bg-white/5 rounded-xl p-4">
@@ -180,6 +180,10 @@ export default function HelpPage() {
                 <div className="bg-white/5 rounded-xl p-4">
                   <p className="font-semibold text-white mb-1">Search</p>
                   <p className="text-sm text-white/60">Find candidates using AI-powered search</p>
+                </div>
+                <div className="bg-white/5 rounded-xl p-4">
+                  <p className="font-semibold text-white mb-1">Searches</p>
+                  <p className="text-sm text-white/60">View and reload your saved search results</p>
                 </div>
                 <div className="bg-white/5 rounded-xl p-4">
                   <p className="font-semibold text-white mb-1">Saved</p>
@@ -202,16 +206,16 @@ export default function HelpPage() {
               <InfoTable
                 headers={['Stat', 'What It Shows']}
                 rows={[
-                  ['Credits Remaining', 'Available search credits'],
-                  ['Credits Used', 'Total credits spent'],
-                  ['Saved Candidates', 'Number in your saved list'],
-                  ['Budget Available', 'Percentage remaining'],
+                  ['Credits', 'Your available search credits (synced live)'],
+                  ['Saved Searches', 'Number of searches you have saved'],
+                  ['Saved Candidates', 'Number of candidates in your saved list'],
                 ]}
               />
 
               <h3 className="text-lg font-semibold text-white mt-6 mb-3">Quick Actions</h3>
               <ul className="list-disc list-inside space-y-2 ml-4">
                 <li><strong className="text-white">Search Candidates</strong> - Start finding talent</li>
+                <li><strong className="text-white">Saved Searches</strong> - View past search results</li>
                 <li><strong className="text-white">Saved Candidates</strong> - Access your saved list</li>
               </ul>
             </div>
