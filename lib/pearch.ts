@@ -113,6 +113,31 @@ export function calculateEnrichCost(params: EnrichParams): number {
   return cost;
 }
 
+const REQUEST_TIMEOUT_MS = 30000; // 30s timeout per request
+const MAX_RETRIES = 2; // Up to 3 total attempts
+const RETRY_DELAYS = [1000, 3000]; // Backoff: 1s, 3s
+
+export class PearchTimeoutError extends Error {
+  constructor() {
+    super('Search timed out — Pearch API took too long to respond. Please try again.');
+    this.name = 'PearchTimeoutError';
+  }
+}
+
+export class PearchRateLimitError extends Error {
+  constructor() {
+    super('Pearch API rate limit reached. Please wait a moment and try again.');
+    this.name = 'PearchRateLimitError';
+  }
+}
+
+export class PearchAuthError extends Error {
+  constructor() {
+    super('Pearch API authentication failed. Please contact support.');
+    this.name = 'PearchAuthError';
+  }
+}
+
 class PearchClient {
   private apiKey: string;
 
@@ -131,17 +156,60 @@ class PearchClient {
       ...options.headers,
     };
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    let lastError: Error | null = null;
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Pearch API error: ${response.status} - ${error}`);
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      // Wait before retry (not on first attempt)
+      if (attempt > 0) {
+        await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt - 1]));
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers,
+          signal: controller.signal,
+        });
+
+        if (response.ok) {
+          return response.json();
+        }
+
+        // Don't retry auth errors or client errors (except 429)
+        if (response.status === 401 || response.status === 403) {
+          throw new PearchAuthError();
+        }
+        if (response.status === 429) {
+          // Retry rate limits
+          lastError = new PearchRateLimitError();
+          continue;
+        }
+        if (response.status >= 400 && response.status < 500) {
+          const error = await response.text();
+          throw new Error(`Pearch API error: ${response.status} - ${error}`);
+        }
+
+        // Server errors (5xx) — retry
+        const error = await response.text();
+        lastError = new Error(`Pearch API error: ${response.status} - ${error}`);
+        continue;
+      } catch (err) {
+        if (err instanceof PearchAuthError) throw err;
+        if ((err as Error).name === 'AbortError') {
+          lastError = new PearchTimeoutError();
+          continue;
+        }
+        lastError = err as Error;
+        continue;
+      } finally {
+        clearTimeout(timeout);
+      }
     }
 
-    return response.json();
+    throw lastError || new Error('Search failed after multiple attempts');
   }
 
   async search(params: SearchParams): Promise<SearchResponse> {

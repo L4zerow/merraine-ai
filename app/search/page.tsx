@@ -9,7 +9,7 @@ import { useCreditUpdate } from '@/components/CreditTracker';
 import { saveCandidate, isCandidateSaved, getSavedCount } from '@/lib/savedCandidates';
 import CandidateDetailModal from '@/components/CandidateDetailModal';
 import CandidateTable from '@/components/search/CandidateTable';
-import { getTierCounts, groupByTier } from '@/lib/searchResultsUtils';
+import { getTierCounts, groupByTier, deduplicateProfiles } from '@/lib/searchResultsUtils';
 import {
   saveSearchCache,
   loadSearchCache,
@@ -30,6 +30,21 @@ interface SearchOptions {
   reveal_emails: boolean;
   reveal_phones: boolean;
   limit: number;
+}
+
+/**
+ * Split location input into an array for the Pearch API's custom_filters.locations.
+ * Uses explicit delimiters only — no heuristic parsing. Pearch handles the matching.
+ *   "Reno, NV; Auburn, CA; Truckee, CA" → ["Reno, NV", "Auburn, CA", "Truckee, CA"]
+ *   "Reno, NV and Auburn, CA"            → ["Reno, NV", "Auburn, CA"]
+ *   "San Francisco, CA"                  → ["San Francisco, CA"]
+ */
+function parseLocations(input: string): string[] {
+  const parts = input
+    .split(/\s*;\s*|\s+and\s+/i)
+    .map(s => s.trim())
+    .filter(Boolean);
+  return parts.length > 0 ? parts : [input];
 }
 
 export default function SearchPage() {
@@ -56,6 +71,8 @@ export default function SearchPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false); // Track if "Load More" was clicked
   const [remainingCredits, setRemainingCredits] = useState<number | null>(null); // null until Pearch balance known
   const [jobContext, setJobContext] = useState<{ jobId: string; jobTitle: string } | null>(null);
+  const [hasSearched, setHasSearched] = useState(false); // Track if user has performed a search
+  const [lastSearchCost, setLastSearchCost] = useState<number | null>(null); // Actual credits used in last search
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveSearchName, setSaveSearchName] = useState('');
@@ -120,15 +137,21 @@ export default function SearchPage() {
     // Close the modal immediately
     setSelectedProfile(null);
 
+    // Preserve the CURRENT search location (not the profile's location)
+    // This prevents Find Similar from returning international results
+    // when the user was originally searching in a specific US region.
+    // Fallback: if no active location, default to "United States" to keep results domestic.
+    const searchLocation = activeLocation || 'United States';
+
     // Update form state so UI shows what was searched
     setQuery(params.query);
-    setLocation(params.location);
+    setLocation(searchLocation);
 
     // Clear cache since this is a new search context
     clearSearchCache();
 
     // Run the search immediately with the params (bypasses async state)
-    handleSearch(false, params);
+    handleSearch(false, { query: params.query, location: searchLocation });
   };
 
   // Clear results and cache
@@ -136,6 +159,8 @@ export default function SearchPage() {
     setResults([]);
     setThreadId(null);
     setCacheAge(null);
+    setHasSearched(false);
+    setLastSearchCost(null);
     clearSearchCache();
   };
 
@@ -229,10 +254,11 @@ export default function SearchPage() {
     }
 
     try {
-      // Build custom_filters for location
+      // Build custom_filters for location — supports multiple cities
+      // e.g., "Reno, NV, Auburn, CA, and Truckee, CA" → ["Reno, NV", "Auburn, CA", "Truckee, CA"]
       const custom_filters: Record<string, string[]> = {};
       if (searchLocation.trim()) {
-        custom_filters.locations = [searchLocation.trim()];
+        custom_filters.locations = parseLocations(searchLocation.trim());
       }
 
       const response = await fetch('/api/search', {
@@ -258,8 +284,11 @@ export default function SearchPage() {
       }
 
       const newProfiles = data.profiles || [];
+      setHasSearched(true);
       // Only append for "Load More", replace for new searches
-      const allResults = isNewSearch ? newProfiles : [...results, ...newProfiles];
+      // Deduplicate to prevent the same candidate appearing twice across pages
+      const combined = isNewSearch ? newProfiles : [...results, ...newProfiles];
+      const allResults = isNewSearch ? combined : deduplicateProfiles(combined);
       const newThreadId = data.thread_id || null;
 
       setResults(allResults);
@@ -281,9 +310,10 @@ export default function SearchPage() {
       if (data.credits_remaining !== undefined) {
         updatePearchBalance(data.credits_remaining);
       }
-      // Log estimated cost for history (Pearch credits_used is unreliable for fast search)
+      // Log actual cost for history (charged per profile returned, not requested)
       const estimatedActualCost = newProfiles.length * costPerProfile;
       logCreditUsage('Search', estimatedActualCost, `${newProfiles.length} profiles`);
+      setLastSearchCost(estimatedActualCost);
       triggerCreditUpdate();
       setRemainingCredits(getRemainingCredits()); // Update local state
     } catch (err) {
@@ -363,7 +393,7 @@ export default function SearchPage() {
               onKeyDown={(e) => e.key === 'Enter' && !loading && handleSearch()}
             />
             <div className="text-xs text-white/30 mt-1">
-              Enter a specific location to filter results. This is passed directly to the API for accurate filtering.
+              Supports multiple cities — e.g. &quot;Reno, NV and Auburn, CA&quot; or &quot;Denver, CO; Boulder, CO&quot;
             </div>
           </div>
 
@@ -417,24 +447,61 @@ export default function SearchPage() {
               >
                 Fresh Data <span className="opacity-70">+2</span>
               </button>
+              <button
+                onClick={() => toggleOption('reveal_emails')}
+                className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                  options.reveal_emails ? 'bg-[#30D158] text-white' : 'bg-white/10 text-white/70 hover:bg-white/15'
+                }`}
+              >
+                Include Emails <span className="opacity-70">+2</span>
+              </button>
+              <button
+                onClick={() => toggleOption('reveal_phones')}
+                className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                  options.reveal_phones ? 'bg-[#30D158] text-white' : 'bg-white/10 text-white/70 hover:bg-white/15'
+                }`}
+              >
+                Include Phones <span className="opacity-70">+14</span>
+              </button>
             </div>
           </div>
 
-          {/* Contact Info — moved to per-candidate enrichment */}
+          {/* Contact Info note */}
           <div className="p-3 rounded-xl bg-white/5 border border-white/10">
             <div className="flex items-center gap-2 text-white/50 text-sm">
               <svg className="w-4 h-4 text-[#0A84FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span>Email and phone are available per candidate after search — click any candidate to get contact info.</span>
+              <span>{options.reveal_emails || options.reveal_phones
+                ? 'Contact info will be included in results and exports.'
+                : 'Toggle "Include Emails" above, or get contact info per candidate after search.'
+              }</span>
             </div>
           </div>
+
+          {/* Search Tips */}
+          <details className="group">
+            <summary className="text-xs text-white/40 cursor-pointer hover:text-white/60 transition-colors flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              Tips for better search results
+            </summary>
+            <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/50 space-y-1.5">
+              <div><span className="text-white/70">Use specific job titles</span> — "Pharmacy Director" not "pharmacy person"</div>
+              <div><span className="text-white/70">Include specialty</span> — "Oncology Nurse Practitioner" not just "nurse"</div>
+              <div><span className="text-white/70">Add seniority</span> — "Senior", "Director", "VP" helps narrow results</div>
+              <div><span className="text-white/70">Use the location filter</span> — more accurate than putting location in the query</div>
+              <div><span className="text-white/70">Try Pro Search for niche roles</span> — costs 5x but returns more relevant matches</div>
+              <div><span className="text-white/70">Request more results</span> — set limit to 100-200 for a bigger candidate pool to choose from</div>
+            </div>
+          </details>
 
           {/* Results Limit */}
           <div>
             <div className="text-xs text-white/50 mb-2">Results Limit</div>
             <div className="flex gap-2 flex-wrap">
-              {[5, 10, 20, 50, 100, 200].map((num) => (
+              {[5, 10, 25, 50, 100, 200].map((num) => (
                 <button
                   key={num}
                   onClick={() => setOptions(prev => ({ ...prev, limit: num }))}
@@ -461,10 +528,13 @@ export default function SearchPage() {
               <span className="text-white font-medium">{options.limit}</span>
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-white/10">
-              <span className="text-white font-medium">Estimated total:</span>
+              <span className="text-white font-medium">Up to:</span>
               <span className={`text-lg font-bold ${remainingCredits !== null && estimatedCost > remainingCredits ? 'text-red-400' : 'text-[#30D158]'}`}>
                 {estimatedCost} credits
               </span>
+            </div>
+            <div className="text-xs text-white/40 mt-1">
+              You only pay for profiles returned — if fewer match, you pay less.
             </div>
           </div>
 
@@ -504,6 +574,11 @@ export default function SearchPage() {
               <h2 className="text-2xl font-semibold text-white">
                 Results ({results.length})
               </h2>
+              {lastSearchCost !== null && (
+                <span className="text-xs text-[#30D158]/70 bg-[#30D158]/10 px-2 py-1 rounded-full">
+                  Used {lastSearchCost} credits
+                </span>
+              )}
               {cacheAge !== null && cacheAge > 0 && (
                 <span className="text-xs text-white/40 bg-white/5 px-2 py-1 rounded-full">
                   Cached {cacheAge < 60 ? `${cacheAge}m ago` : '< 1h ago'}
@@ -562,14 +637,28 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Empty State */}
-      {!loading && results.length === 0 && !error && (
+      {/* Empty State — pre-search */}
+      {!loading && results.length === 0 && !error && !hasSearched && (
         <GlassCard className="text-center py-12">
           <svg className="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <div className="text-white/40 text-lg">Enter a search query to find candidates</div>
           <p className="text-white/30 mt-2">Try something like "React developer in New York"</p>
+        </GlassCard>
+      )}
+
+      {/* No Results Found — post-search */}
+      {!loading && results.length === 0 && !error && hasSearched && (
+        <GlassCard className="text-center py-12">
+          <svg className="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="text-white/40 text-lg">No results found</div>
+          <p className="text-white/30 mt-2 max-w-md mx-auto">
+            Try broadening your search — use a wider location (e.g., state instead of city),
+            simplify the job title, or increase the results limit.
+          </p>
         </GlassCard>
       )}
 

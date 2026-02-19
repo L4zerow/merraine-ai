@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { createPearchClient, SearchParams, calculateSearchCost, Profile, CustomFilters } from '@/lib/pearch';
+import { createPearchClient, SearchParams, calculateSearchCost, Profile, CustomFilters, PearchTimeoutError, PearchRateLimitError, PearchAuthError } from '@/lib/pearch';
 import { rateLimit, getIdentifier, createRateLimitHeaders } from '@/lib/rateLimit';
 import { saveBalance } from '@/lib/db/queries';
 
 const apiKey = process.env.PEARCH_API_KEY;
 const hasDatabase = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
-const BATCH_SIZE = 50; // Pearch API max per request
+const PEARCH_MAX_LIMIT = 1000; // Pearch API confirmed max per request (Feb 13 call)
 
 interface TransformedResult {
   profiles: Profile[];
@@ -61,61 +61,6 @@ function transformSearchResults(apiResponse: Record<string, unknown>): Transform
   };
 }
 
-// Auto-batch: for limits > 50, make multiple sequential Pearch API calls
-// Uses thread_id + offset for pagination (thread_id alone replays same results)
-async function batchSearch(
-  client: ReturnType<typeof createPearchClient>,
-  params: SearchParams,
-  totalLimit: number
-): Promise<TransformedResult> {
-  const allProfiles: Profile[] = [];
-  const seenIds = new Set<string>();
-  let threadId = params.thread_id;
-  let creditsRemaining: number | undefined;
-  let totalCount: number | undefined;
-  let offset = 0;
-
-  while (allProfiles.length < totalLimit) {
-    const batchLimit = Math.min(BATCH_SIZE, totalLimit - allProfiles.length);
-    const batchParams: SearchParams = {
-      ...params,
-      limit: batchLimit,
-      thread_id: threadId || undefined,
-      offset: offset > 0 ? offset : undefined,
-    };
-
-    const result = await client.search(batchParams);
-    const transformed = transformSearchResults(result as Record<string, unknown>);
-
-    // Deduplicate profiles by ID
-    const newProfiles = transformed.profiles.filter(p => {
-      if (!p.id || seenIds.has(p.id)) return false;
-      seenIds.add(p.id);
-      return true;
-    });
-
-    allProfiles.push(...newProfiles);
-    threadId = transformed.thread_id;
-    offset += transformed.profiles.length; // Advance offset by raw count
-    if (transformed.credits_remaining !== undefined) {
-      creditsRemaining = transformed.credits_remaining;
-    }
-    if (transformed.total_count !== undefined) {
-      totalCount = transformed.total_count;
-    }
-
-    // Stop if Pearch returned fewer results than requested (pool exhausted)
-    // or no thread_id for continuation
-    if (transformed.profiles.length < batchLimit || !threadId) break;
-  }
-
-  return {
-    profiles: allProfiles,
-    thread_id: threadId,
-    credits_remaining: creditsRemaining,
-    total_count: totalCount,
-  };
-}
 
 export async function POST(request: NextRequest) {
   // Verify authentication
@@ -174,31 +119,25 @@ export async function POST(request: NextRequest) {
       searchType: body.type || 'fast',
       limit: requestedLimit,
       estimatedCost,
-      batched: requestedLimit > BATCH_SIZE,
       ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
     }));
 
     const client = createPearchClient(apiKey);
 
-    let transformed: TransformedResult;
+    // Cap limit at Pearch max (1,000) — single call, no batching needed
+    body.limit = Math.min(requestedLimit, PEARCH_MAX_LIMIT);
 
-    if (requestedLimit > BATCH_SIZE && !body.thread_id) {
-      // Auto-batch for large requests (new searches only, not "Load More")
-      transformed = await batchSearch(client, body, requestedLimit);
-    } else {
-      // Single request (small limit or Load More with thread_id)
-      const result = await client.search(body);
-      transformed = transformSearchResults(result as Record<string, unknown>);
-    }
+    const result = await client.search(body);
+    const transformed = transformSearchResults(result as Record<string, unknown>);
 
-    // Log actual credits used
+    // Log actual credits used + thread_id for Pearch quality debugging
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       endpoint: '/api/search',
       query: body.query?.substring(0, 100),
+      thread_id: transformed.thread_id,
       creditsUsed: transformed.credits_used || estimatedCost,
       profilesReturned: transformed.profiles.length,
-      batched: requestedLimit > BATCH_SIZE,
     }));
 
     // Persist Pearch balance to DB for dashboard sync
@@ -212,8 +151,19 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Search error:', error);
+
+    if (error instanceof PearchTimeoutError) {
+      return NextResponse.json({ error: error.message }, { status: 504 });
+    }
+    if (error instanceof PearchRateLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 429 });
+    }
+    if (error instanceof PearchAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Search failed' },
+      { error: error instanceof Error ? error.message : 'Search failed — please try again' },
       { status: 500 }
     );
   }
