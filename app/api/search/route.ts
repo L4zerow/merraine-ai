@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
 
     const client = createPearchClient(apiKey);
 
-    // Cap limit at Pearch max (1,000) — single call, no batching needed
+    // Cap limit at Pearch max (1,000) — single call, no batching needed. Query and all other params are sent to Pearch as-is; we do not rewrite or alter queries.
     body.limit = Math.min(requestedLimit, PEARCH_MAX_LIMIT);
 
     const result = await client.search(body);

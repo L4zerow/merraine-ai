@@ -39,6 +39,87 @@ interface SearchOptions {
  *   "Reno, NV and Auburn, CA"            → ["Reno, NV", "Auburn, CA"]
  *   "San Francisco, CA"                  → ["San Francisco, CA"]
  */
+const QUERY_SUGGESTIONS: Record<string, string[]> = {
+  'staffing': [
+    'Healthcare Staffing Coordinator',
+    'Nurse Staffing Manager',
+    'Clinical Staffing Recruiter',
+    'Staffing Agency Recruiter healthcare',
+    'Workforce Planning Manager hospital',
+  ],
+  'recruiter': [
+    'Healthcare Recruiter',
+    'Clinical Recruiter',
+    'Physician Recruiter',
+    'Nurse Recruiter',
+    'Talent Acquisition Specialist healthcare',
+  ],
+  'nurse': [
+    'Registered Nurse RN',
+    'Nurse Practitioner NP',
+    'Licensed Practical Nurse LPN',
+    'Travel Nurse',
+    'Charge Nurse',
+    'Nurse Manager',
+  ],
+  'director': [
+    'Director of Nursing',
+    'Pharmacy Director',
+    'Director of Clinical Operations',
+    'Medical Director',
+    'Director of Patient Care',
+  ],
+  'pharmacy': [
+    'Pharmacy Director',
+    'Clinical Pharmacist',
+    'Pharmacy Manager',
+    'Staff Pharmacist hospital',
+    'Pharmacist in Charge',
+  ],
+  'therapist': [
+    'Physical Therapist PT',
+    'Occupational Therapist OT',
+    'Speech Language Pathologist SLP',
+    'Respiratory Therapist',
+    'Licensed Clinical Social Worker LCSW',
+  ],
+  'physician': [
+    'Family Medicine Physician',
+    'Emergency Medicine Physician',
+    'Internal Medicine Physician',
+    'Hospitalist',
+    'Pediatrician',
+  ],
+  'manager': [
+    'Nurse Manager',
+    'Clinical Operations Manager',
+    'Practice Manager healthcare',
+    'Health Information Manager',
+    'Case Management Manager',
+  ],
+};
+
+function getQuerySuggestions(query: string): string[] {
+  const lower = query.toLowerCase();
+
+  // Check for matching category keywords
+  for (const [keyword, suggestions] of Object.entries(QUERY_SUGGESTIONS)) {
+    if (lower.includes(keyword)) {
+      return suggestions;
+    }
+  }
+
+  // Generic healthcare suggestions for unrecognized queries
+  return [
+    'Registered Nurse RN',
+    'Healthcare Recruiter',
+    'Pharmacy Director',
+    'Physical Therapist PT',
+    'Director of Nursing',
+    'Clinical Operations Manager',
+  ];
+}
+
 function parseLocations(input: string): string[] {
   const parts = input
     .split(/\s*;\s*|\s+and\s+/i)
@@ -488,12 +569,36 @@ export default function SearchPage() {
               Tips for better search results
             </summary>
             <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/50 space-y-1.5">
-              <div><span className="text-white/70">Use specific job titles</span> — "Pharmacy Director" not "pharmacy person"</div>
-              <div><span className="text-white/70">Include specialty</span> — "Oncology Nurse Practitioner" not just "nurse"</div>
-              <div><span className="text-white/70">Add seniority</span> — "Senior", "Director", "VP" helps narrow results</div>
+              <div><span className="text-white/70">Use specific job titles</span> — &ldquo;Pharmacy Director&rdquo; not &ldquo;pharmacy person&rdquo;</div>
+              <div><span className="text-white/70">Include specialty</span> — &ldquo;Oncology Nurse Practitioner&rdquo; not just &ldquo;nurse&rdquo;</div>
+              <div><span className="text-white/70">Add seniority</span> — &ldquo;Senior&rdquo;, &ldquo;Director&rdquo;, &ldquo;VP&rdquo; helps narrow results</div>
+              <div><span className="text-white/70">Avoid generic titles</span> — &ldquo;Healthcare Staffing Coordinator&rdquo; beats &ldquo;Staffing Specialist&rdquo;</div>
               <div><span className="text-white/70">Use the location filter</span> — more accurate than putting location in the query</div>
               <div><span className="text-white/70">Try Pro Search for niche roles</span> — costs 5x but returns more relevant matches</div>
-              <div><span className="text-white/70">Request more results</span> — set limit to 100-200 for a bigger candidate pool to choose from</div>
+              <div><span className="text-white/70">Request more results</span> — set limit to 100-200 for a bigger candidate pool</div>
+            </div>
+            <div className="mt-2 p-3 rounded-xl bg-white/5 border border-white/10">
+              <div className="text-xs text-white/50 mb-2">Example searches:</div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Registered Nurse RN',
+                  'Pharmacy Director',
+                  'Healthcare Recruiter',
+                  'Physical Therapist PT',
+                  'Director of Nursing',
+                  'Nurse Practitioner NP',
+                  'Clinical Operations Manager',
+                  'Respiratory Therapist',
+                ].map((example) => (
+                  <button
+                    key={example}
+                    onClick={() => setQuery(example)}
+                    className="px-2.5 py-1 rounded-lg text-xs bg-white/5 text-white/50 hover:bg-[#0A84FF]/20 hover:text-[#0A84FF] transition-colors"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
             </div>
           </details>
 
@@ -648,17 +753,53 @@ export default function SearchPage() {
         </GlassCard>
       )}
 
-      {/* No Results Found — post-search */}
+      {/* No Results Found — post-search with smart suggestions */}
       {!loading && results.length === 0 && !error && hasSearched && (
-        <GlassCard className="text-center py-12">
-          <svg className="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div className="text-white/40 text-lg">No results found</div>
-          <p className="text-white/30 mt-2 max-w-md mx-auto">
-            Try broadening your search — use a wider location (e.g., state instead of city),
-            simplify the job title, or increase the results limit.
-          </p>
+        <GlassCard className="py-8">
+          <div className="text-center mb-6">
+            <svg className="w-16 h-16 mx-auto text-white/20 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="text-white/40 text-lg">No results found for &ldquo;{activeQuery}&rdquo;</div>
+          </div>
+
+          <div className="max-w-xl mx-auto space-y-4">
+            <div className="p-4 rounded-xl bg-[#0A84FF]/10 border border-[#0A84FF]/20">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-[#0A84FF] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                <div>
+                  <div className="text-[#0A84FF] font-medium mb-2">Tips to get results</div>
+                  <ul className="text-sm text-white/60 space-y-2">
+                    <li><span className="text-white/80">Be more specific with the job title</span> — &ldquo;Staffing Specialist&rdquo; is generic. Try &ldquo;Healthcare Staffing Coordinator&rdquo; or &ldquo;Nurse Staffing Manager&rdquo;</li>
+                    <li><span className="text-white/80">Widen the location</span> — search by state (e.g., &ldquo;Ohio&rdquo;) instead of a single city</li>
+                    <li><span className="text-white/80">Try related titles</span> — the same role often has different names across companies</li>
+                    <li><span className="text-white/80">Remove the location filter</span> — search nationwide first, then narrow down</li>
+                    <li><span className="text-white/80">Use Pro Search for niche roles</span> — it searches deeper and returns more relevant matches</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+              <div className="text-white/70 text-sm font-medium mb-3">Try one of these instead:</div>
+              <div className="flex flex-wrap gap-2">
+                {getQuerySuggestions(activeQuery).map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => {
+                      setQuery(suggestion);
+                      setHasSearched(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-sm bg-white/10 text-white/70 hover:bg-[#0A84FF]/20 hover:text-[#0A84FF] transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </GlassCard>
       )}
 

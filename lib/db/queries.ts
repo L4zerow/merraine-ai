@@ -6,6 +6,7 @@ import {
   searchCandidates,
   savedCandidates,
   creditTransactions,
+  appSettings,
 } from './schema';
 import { Profile } from '@/lib/pearch';
 
@@ -335,4 +336,24 @@ export async function getLastKnownBalance(): Promise<number | null> {
     .orderBy(desc(creditTransactions.createdAt))
     .limit(1);
   return result?.credits ?? null;
+}
+
+// ─── App Settings ────────────────────────────────────────────
+
+export async function getSetting(key: string): Promise<string | null> {
+  const [result] = await db
+    .select({ value: appSettings.value })
+    .from(appSettings)
+    .where(eq(appSettings.key, key));
+  return result?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string) {
+  await db
+    .insert(appSettings)
+    .values({ key, value, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: { value, updatedAt: new Date() },
+    });
 }

@@ -83,6 +83,13 @@ export const savedCandidates = pgTable(
   })
 );
 
+// App settings — key-value store for runtime configuration (e.g. password override)
+export const appSettings = pgTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Append-only credit ledger — server-side source of truth
 export const creditTransactions = pgTable('credit_transactions', {
   id: serial('id').primaryKey(),

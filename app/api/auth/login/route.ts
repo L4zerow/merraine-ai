@@ -1,15 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import bcrypt from 'bcryptjs';
+import { getSetting } from '@/lib/db/queries';
 
-// Credentials from environment variables - NEVER hardcode
 const VALID_USERNAME = process.env.AUTH_USERNAME;
-const VALID_PASSWORD = process.env.AUTH_PASSWORD;
+const ENV_PASSWORD = process.env.AUTH_PASSWORD;
+
+async function verifyPassword(password: string): Promise<boolean> {
+  try {
+    const storedHash = await getSetting('password_hash');
+    if (storedHash) {
+      return bcrypt.compare(password, storedHash);
+    }
+  } catch {
+    // DB not available — fall through to env var check
+  }
+
+  // Fallback: check env var (initial setup or DB unreachable)
+  return ENV_PASSWORD ? password === ENV_PASSWORD : false;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if credentials are configured
-    if (!VALID_USERNAME || !VALID_PASSWORD) {
-      console.error('AUTH_USERNAME and AUTH_PASSWORD must be set in environment');
+    if (!VALID_USERNAME) {
+      console.error('AUTH_USERNAME must be set in environment');
       return NextResponse.json(
         { error: 'Authentication not configured' },
         { status: 500 }
@@ -18,21 +32,16 @@ export async function POST(request: NextRequest) {
 
     const { username, password } = await request.json();
 
-    // Debug logging (remove after fixing)
-    console.log('Login attempt:', {
-      providedUsername: username,
-      expectedUsername: VALID_USERNAME,
-      usernameMatch: username === VALID_USERNAME,
-      passwordMatch: password === VALID_PASSWORD
-    });
+    const usernameMatch = username === VALID_USERNAME;
+    const passwordMatch = usernameMatch ? await verifyPassword(password) : false;
 
-    if (username === VALID_USERNAME && password === VALID_PASSWORD) {
+    if (usernameMatch && passwordMatch) {
       const cookieStore = cookies();
       cookieStore.set('merraine-auth', 'authenticated', {
         httpOnly: true,
-        secure: true,  // Always require HTTPS
-        sameSite: 'strict',  // Prevent CSRF
-        maxAge: 60 * 60 * 24 * 7, // 1 week
+        secure: true,
+        sameSite: 'strict',
+        maxAge: 60 * 60 * 24 * 7,
         path: '/',
       });
 
