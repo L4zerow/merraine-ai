@@ -34,10 +34,7 @@ interface SearchOptions {
 
 /**
  * Split location input into an array for the Pearch API's custom_filters.locations.
- * Uses explicit delimiters only — no heuristic parsing. Pearch handles the matching.
- *   "Reno, NV; Auburn, CA; Truckee, CA" → ["Reno, NV", "Auburn, CA", "Truckee, CA"]
- *   "Reno, NV and Auburn, CA"            → ["Reno, NV", "Auburn, CA"]
- *   "San Francisco, CA"                  → ["San Francisco, CA"]
+ * Pass-through only: we split on ; and " and " and send the rest to Pearch as-is. Pearch handles all location parsing.
  */
 const QUERY_SUGGESTIONS: Record<string, string[]> = {
   'staffing': [
@@ -468,13 +465,13 @@ export default function SearchPage() {
           <div>
             <div className="text-xs text-white/50 mb-2">Location Filter (optional)</div>
             <GlassInput
-              placeholder="e.g., Ohio, USA or San Francisco, CA"
+              placeholder="e.g., Miami, FL or San Francisco, CA"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !loading && handleSearch()}
             />
             <div className="text-xs text-white/30 mt-1">
-              Supports multiple cities — e.g. &quot;Reno, NV and Auburn, CA&quot; or &quot;Denver, CO; Boulder, CO&quot;
+              Passed to Pearch as-is. Use &quot;City, State&quot; format (e.g. Miami, FL) for accurate filtering. Multiple: &quot;Reno, NV; Auburn, CA&quot;
             </div>
           </div>
 
