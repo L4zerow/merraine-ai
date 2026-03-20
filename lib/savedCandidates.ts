@@ -5,69 +5,61 @@ import { Profile } from './pearch';
 export interface SavedCandidate extends Profile {
   savedAt: string;
   notes: string;
+  savedId?: number;
 }
 
-const STORAGE_KEY = 'merraine_saved_candidates';
+// ─── API-backed saved candidates (replaces localStorage) ───
 
-export function getSavedCandidates(): SavedCandidate[] {
-  if (typeof window === 'undefined') return [];
-
+export async function getSavedCandidates(): Promise<SavedCandidate[]> {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const res = await fetch('/api/candidates/saved');
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.candidates || [];
   } catch {
     return [];
   }
 }
 
-export function saveCandidate(profile: Profile): SavedCandidate {
-  const candidates = getSavedCandidates();
-
-  // Check if already saved
-  const existing = candidates.find(c => c.id === profile.id);
-  if (existing) return existing;
-
-  const savedCandidate: SavedCandidate = {
-    ...profile,
-    savedAt: new Date().toISOString(),
-    notes: '',
-  };
-
-  candidates.push(savedCandidate);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(candidates));
-
-  // Dispatch event for UI updates
-  window.dispatchEvent(new CustomEvent('savedCandidatesUpdate'));
-
-  return savedCandidate;
-}
-
-export function removeSavedCandidate(id: string): void {
-  const candidates = getSavedCandidates();
-  const filtered = candidates.filter(c => c.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-
-  window.dispatchEvent(new CustomEvent('savedCandidatesUpdate'));
-}
-
-export function updateCandidateNotes(id: string, notes: string): void {
-  const candidates = getSavedCandidates();
-  const candidate = candidates.find(c => c.id === id);
-
-  if (candidate) {
-    candidate.notes = notes;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(candidates));
+export async function saveCandidate(profile: Profile): Promise<SavedCandidate | null> {
+  try {
+    const res = await fetch('/api/candidates/saved', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile }),
+    });
+    if (!res.ok) return null;
     window.dispatchEvent(new CustomEvent('savedCandidatesUpdate'));
+    return { ...profile, savedAt: new Date().toISOString(), notes: '' };
+  } catch {
+    return null;
   }
 }
 
-export function isCandidateSaved(id: string): boolean {
-  const candidates = getSavedCandidates();
-  return candidates.some(c => c.id === id);
+export async function removeSavedCandidate(savedId: number): Promise<void> {
+  try {
+    await fetch('/api/candidates/saved', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ savedId }),
+    });
+    window.dispatchEvent(new CustomEvent('savedCandidatesUpdate'));
+  } catch {
+    // Ignore
+  }
 }
 
-export function getSavedCount(): number {
-  return getSavedCandidates().length;
+export async function updateCandidateNotes(savedId: number, notes: string): Promise<void> {
+  try {
+    await fetch('/api/candidates/saved', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ savedId, notes }),
+    });
+    window.dispatchEvent(new CustomEvent('savedCandidatesUpdate'));
+  } catch {
+    // Ignore
+  }
 }
 
 export function exportToCSV(candidates: SavedCandidate[]): void {
@@ -107,7 +99,7 @@ export function exportToMarkdown(candidates: SavedCandidate[]): void {
     lines.push(`## ${i + 1}. ${c.name || 'Unknown'}`);
     lines.push('');
     if (c.headline) lines.push(`**${c.headline}**`);
-    if (c.location) lines.push(`📍 ${c.location}`);
+    if (c.location) lines.push(`Location: ${c.location}`);
     lines.push('');
     if (c.linkedin_url) lines.push(`- [LinkedIn Profile](${c.linkedin_url})`);
     if (c.email) lines.push(`- Email: ${c.email}`);
@@ -170,11 +162,4 @@ function downloadFile(content: string, type: string, filename: string): void {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-}
-
-// Hook for components to listen to saved candidates changes
-export function useSavedCandidatesUpdate() {
-  return () => {
-    window.dispatchEvent(new CustomEvent('savedCandidatesUpdate'));
-  };
 }

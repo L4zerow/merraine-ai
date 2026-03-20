@@ -37,7 +37,7 @@ export interface TierGroups {
  * - 0.0-4.0: rating scale (divide by 4, then multiply by 100)
  * - Already percentage: > 4 means it's already a percentage
  *
- * NOTE: Pearch API currently returns score=4 for ALL matched candidates,
+ * NOTE: API currently returns score=4 for all matched candidates,
  * which doesn't provide meaningful differentiation. When this happens,
  * we return -1 to indicate "no meaningful score" so UI can handle it.
  */
@@ -51,7 +51,7 @@ export function scoreToPercentage(score: number | undefined): number {
   if (score > 4) return Math.round(score);
 
   // If score > 1 and <= 4, it's likely a 0-4 scale
-  // NOTE: Pearch always returns 4, so this always = 100%
+  // API returns 4 on the 0-4 scale = 100%
   if (score > 1) return Math.round((score / 4) * 100);
 
   // If score <= 1, it's a decimal (0.0-1.0 scale)

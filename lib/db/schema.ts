@@ -9,7 +9,40 @@ import {
   jsonb,
   primaryKey,
   uniqueIndex,
+  uuid,
 } from 'drizzle-orm/pg-core';
+
+// ─── Users & Sessions ───────────────────────────────────────
+
+export const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull().unique(),
+  name: text('name').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role').notNull().default('user'), // 'admin' | 'user'
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const sessions = pgTable('sessions', {
+  id: text('id').primaryKey(), // UUID string
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const creditAllocations = pgTable('credit_allocations', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' })
+    .unique(),
+  allocatedCredits: integer('allocated_credits').notNull().default(0),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
 
 // Saved searches — named search queries with their results
 export const searches = pgTable('searches', {
@@ -21,6 +54,7 @@ export const searches = pgTable('searches', {
   threadId: text('thread_id'),
   totalResults: integer('total_results').default(0),
   creditsUsed: integer('credits_used').default(0),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });
@@ -67,7 +101,7 @@ export const searchCandidates = pgTable(
   })
 );
 
-// Explicitly saved candidates with notes
+// Explicitly saved candidates with notes — per-user
 export const savedCandidates = pgTable(
   'saved_candidates',
   {
@@ -75,11 +109,12 @@ export const savedCandidates = pgTable(
     candidateId: integer('candidate_id')
       .notNull()
       .references(() => candidates.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
     notes: text('notes').default(''),
     savedAt: timestamp('saved_at').defaultNow(),
   },
   (table) => ({
-    uniqueCandidate: uniqueIndex('unique_saved_candidate').on(table.candidateId),
+    uniqueSavedCandidatePerUser: uniqueIndex('unique_saved_candidate_per_user').on(table.candidateId, table.userId),
   })
 );
 
@@ -96,7 +131,8 @@ export const creditTransactions = pgTable('credit_transactions', {
   operation: text('operation').notNull(),
   credits: integer('credits').notNull(),
   details: text('details'),
-  searchId: integer('search_id').references(() => searches.id),
-  candidateId: integer('candidate_id').references(() => candidates.id),
+  searchId: integer('search_id').references(() => searches.id, { onDelete: 'set null' }),
+  candidateId: integer('candidate_id').references(() => candidates.id, { onDelete: 'set null' }),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow(),
 });

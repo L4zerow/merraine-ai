@@ -1,6 +1,9 @@
 import { db } from './index';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, and } from 'drizzle-orm';
 import {
+  users,
+  sessions,
+  creditAllocations,
   searches,
   candidates,
   searchCandidates,
@@ -9,6 +12,152 @@ import {
   appSettings,
 } from './schema';
 import { Profile } from '@/lib/pearch';
+
+// ─── Users ──────────────────────────────────────────────────
+
+export async function getUserByEmail(email: string) {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email.toLowerCase()));
+  return user || null;
+}
+
+export async function getUserById(id: number) {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, id));
+  return user || null;
+}
+
+export async function createUser(data: {
+  email: string;
+  name: string;
+  passwordHash: string;
+  role?: string;
+}) {
+  const [user] = await db
+    .insert(users)
+    .values({
+      email: data.email.toLowerCase(),
+      name: data.name,
+      passwordHash: data.passwordHash,
+      role: data.role || 'user',
+    })
+    .returning();
+  return user;
+}
+
+export async function updateUser(id: number, data: {
+  name?: string;
+  email?: string;
+  role?: string;
+  isActive?: boolean;
+  passwordHash?: string;
+}) {
+  const [updated] = await db
+    .update(users)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(users.id, id))
+    .returning();
+  return updated;
+}
+
+export async function listUsers() {
+  return db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      role: users.role,
+      isActive: users.isActive,
+      createdAt: users.createdAt,
+    })
+    .from(users)
+    .orderBy(users.id);
+}
+
+// ─── Sessions ───────────────────────────────────────────────
+
+export async function getSessionById(id: string) {
+  const [session] = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.id, id));
+  return session || null;
+}
+
+export async function createSessionRecord(id: string, userId: number, expiresAt: Date) {
+  const [session] = await db
+    .insert(sessions)
+    .values({ id, userId, expiresAt })
+    .returning();
+  return session;
+}
+
+export async function deleteSessionRecord(id: string) {
+  await db.delete(sessions).where(eq(sessions.id, id));
+}
+
+// ─── Credit Allocations ────────────────────────────────────
+
+export async function getUserAllocation(userId: number): Promise<number> {
+  const [alloc] = await db
+    .select({ allocatedCredits: creditAllocations.allocatedCredits })
+    .from(creditAllocations)
+    .where(eq(creditAllocations.userId, userId));
+  return alloc?.allocatedCredits ?? 0;
+}
+
+export async function setUserAllocation(userId: number, credits: number) {
+  const [existing] = await db
+    .select()
+    .from(creditAllocations)
+    .where(eq(creditAllocations.userId, userId));
+
+  if (existing) {
+    const [updated] = await db
+      .update(creditAllocations)
+      .set({ allocatedCredits: credits, updatedAt: new Date() })
+      .where(eq(creditAllocations.userId, userId))
+      .returning();
+    return updated;
+  } else {
+    const [created] = await db
+      .insert(creditAllocations)
+      .values({ userId, allocatedCredits: credits })
+      .returning();
+    return created;
+  }
+}
+
+export async function adjustUserAllocation(userId: number, delta: number) {
+  const current = await getUserAllocation(userId);
+  const newAmount = Math.max(0, current + delta);
+  return setUserAllocation(userId, newAmount);
+}
+
+export async function getAllAllocations() {
+  return db
+    .select({
+      userId: creditAllocations.userId,
+      allocatedCredits: creditAllocations.allocatedCredits,
+      userName: users.name,
+      userEmail: users.email,
+      userRole: users.role,
+    })
+    .from(creditAllocations)
+    .innerJoin(users, eq(creditAllocations.userId, users.id))
+    .orderBy(users.id);
+}
+
+export async function getTotalAllocated(): Promise<number> {
+  const [result] = await db
+    .select({ total: sql<number>`COALESCE(SUM(${creditAllocations.allocatedCredits}), 0)` })
+    .from(creditAllocations);
+  return Number(result?.total || 0);
+}
 
 // ─── Searches ───────────────────────────────────────────────
 
@@ -19,6 +168,7 @@ export async function createSearch(data: {
   options: Record<string, unknown>;
   threadId?: string;
   creditsUsed?: number;
+  userId?: number;
 }) {
   const [search] = await db
     .insert(searches)
@@ -30,13 +180,14 @@ export async function createSearch(data: {
       threadId: data.threadId || null,
       creditsUsed: data.creditsUsed || 0,
       totalResults: 0,
+      userId: data.userId || null,
     })
     .returning();
   return search;
 }
 
-export async function listSearches() {
-  return db
+export async function listSearches(userId?: number) {
+  const query = db
     .select({
       id: searches.id,
       name: searches.name,
@@ -44,10 +195,18 @@ export async function listSearches() {
       location: searches.location,
       totalResults: searches.totalResults,
       creditsUsed: searches.creditsUsed,
+      userId: searches.userId,
       createdAt: searches.createdAt,
     })
-    .from(searches)
-    .orderBy(desc(searches.createdAt));
+    .from(searches);
+
+  if (userId !== undefined) {
+    return query
+      .where(eq(searches.userId, userId))
+      .orderBy(desc(searches.createdAt));
+  }
+
+  return query.orderBy(desc(searches.createdAt));
 }
 
 export async function getSearchWithCandidates(searchId: number) {
@@ -228,28 +387,31 @@ export async function getCandidateByPearchId(pearchId: string) {
 
 // ─── Saved Candidates ───────────────────────────────────────
 
-export async function saveCandidateToDb(pearchId: string, notes: string = '') {
+export async function saveCandidateToDb(pearchId: string, notes: string = '', userId?: number) {
   // First ensure the candidate exists
   const candidate = await getCandidateByPearchId(pearchId);
   if (!candidate) return null;
 
   const [saved] = await db
     .insert(savedCandidates)
-    .values({ candidateId: candidate.id, notes })
+    .values({ candidateId: candidate.id, notes, userId: userId || null })
     .onConflictDoNothing()
     .returning();
   return saved;
 }
 
-export async function getSavedCandidatesFromDb() {
-  const results = await db
+export async function getSavedCandidatesFromDb(userId?: number) {
+  const baseQuery = db
     .select({
       saved: savedCandidates,
       candidate: candidates,
     })
     .from(savedCandidates)
-    .innerJoin(candidates, eq(savedCandidates.candidateId, candidates.id))
-    .orderBy(desc(savedCandidates.savedAt));
+    .innerJoin(candidates, eq(savedCandidates.candidateId, candidates.id));
+
+  const results = userId !== undefined
+    ? await baseQuery.where(eq(savedCandidates.userId, userId)).orderBy(desc(savedCandidates.savedAt))
+    : await baseQuery.orderBy(desc(savedCandidates.savedAt));
 
   return results.map((r) => ({
     ...candidateToProfile(r.candidate),
@@ -260,21 +422,42 @@ export async function getSavedCandidatesFromDb() {
 }
 
 export async function updateSavedCandidateNotes(
-  candidateId: number,
+  savedId: number,
   notes: string
 ) {
   const [updated] = await db
     .update(savedCandidates)
     .set({ notes })
-    .where(eq(savedCandidates.candidateId, candidateId))
+    .where(eq(savedCandidates.id, savedId))
     .returning();
   return updated;
+}
+
+export async function removeSavedCandidateById(savedId: number) {
+  await db
+    .delete(savedCandidates)
+    .where(eq(savedCandidates.id, savedId));
 }
 
 export async function removeSavedCandidate(candidateId: number) {
   await db
     .delete(savedCandidates)
     .where(eq(savedCandidates.candidateId, candidateId));
+}
+
+export async function isCandidateSavedForUser(pearchId: string, userId: number): Promise<boolean> {
+  const candidate = await getCandidateByPearchId(pearchId);
+  if (!candidate) return false;
+
+  const [saved] = await db
+    .select({ id: savedCandidates.id })
+    .from(savedCandidates)
+    .where(and(
+      eq(savedCandidates.candidateId, candidate.id),
+      eq(savedCandidates.userId, userId)
+    ));
+
+  return !!saved;
 }
 
 // ─── Credit Transactions ────────────────────────────────────
@@ -285,6 +468,7 @@ export async function logCreditTransaction(data: {
   details?: string;
   searchId?: number;
   candidateId?: number;
+  userId?: number;
 }) {
   const [tx] = await db
     .insert(creditTransactions)
@@ -294,6 +478,7 @@ export async function logCreditTransaction(data: {
       details: data.details || null,
       searchId: data.searchId || null,
       candidateId: data.candidateId || null,
+      userId: data.userId || null,
     })
     .returning();
   return tx;
@@ -324,7 +509,7 @@ export async function saveBalance(balance: number) {
     .values({
       operation: 'balance_sync',
       credits: balance,
-      details: `Pearch balance: ${balance}`,
+      details: `Balance sync: ${balance}`,
     });
 }
 

@@ -15,7 +15,8 @@ import CandidateDetailModal from '@/components/CandidateDetailModal';
 
 export default function SavedPage() {
   const [candidates, setCandidates] = useState<SavedCandidate[]>([]);
-  const [editingNotes, setEditingNotes] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editingNotes, setEditingNotes] = useState<number | null>(null);
   const [noteText, setNoteText] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState<SavedCandidate | null>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
@@ -28,23 +29,26 @@ export default function SavedPage() {
     return () => window.removeEventListener('savedCandidatesUpdate', handleUpdate);
   }, []);
 
-  const loadCandidates = () => {
-    setCandidates(getSavedCandidates());
+  const loadCandidates = async () => {
+    setLoading(true);
+    const result = await getSavedCandidates();
+    setCandidates(result);
+    setLoading(false);
   };
 
-  const handleRemove = (id: string) => {
-    removeSavedCandidate(id);
+  const handleRemove = async (savedId: number) => {
+    await removeSavedCandidate(savedId);
     loadCandidates();
   };
 
   const handleStartEditNotes = (candidate: SavedCandidate) => {
-    if (!candidate.id) return;
-    setEditingNotes(candidate.id);
+    if (!candidate.savedId) return;
+    setEditingNotes(candidate.savedId);
     setNoteText(candidate.notes || '');
   };
 
-  const handleSaveNotes = (id: string) => {
-    updateCandidateNotes(id, noteText);
+  const handleSaveNotes = async (savedId: number) => {
+    await updateCandidateNotes(savedId, noteText);
     setEditingNotes(null);
     setNoteText('');
     loadCandidates();
@@ -64,6 +68,17 @@ export default function SavedPage() {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showExportMenu]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <h1 className="text-3xl font-bold text-white mb-2">Saved Candidates</h1>
+        <GlassCard>
+          <div className="text-white/50 text-center py-8">Loading...</div>
+        </GlassCard>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -114,26 +129,6 @@ export default function SavedPage() {
         )}
       </div>
 
-      {/* Info Banner - only show when there are candidates to export */}
-      {candidates.length > 0 && (
-        <GlassCard className="bg-amber-500/10 border-amber-500/30">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-              <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <div className="text-white font-medium">Export your candidates before leaving</div>
-              <div className="text-sm text-white/60 mt-1">
-                Candidates are stored in your browser only. To keep your data safe or share with your team,
-                export to <strong>CSV</strong> (Excel/Sheets), <strong>Markdown</strong> (docs), or <strong>JSON</strong> (integrations).
-              </div>
-            </div>
-          </div>
-        </GlassCard>
-      )}
-
       {/* Candidates List */}
       {candidates.length === 0 ? (
         <GlassCard className="text-center py-12">
@@ -142,7 +137,7 @@ export default function SavedPage() {
           </svg>
           <div className="text-white/40 text-lg">No saved candidates yet</div>
           <p className="text-white/30 mt-2">
-            Search for candidates and click "Save" to add them here
+            Search for candidates and click &quot;Save&quot; to add them here
           </p>
           <a
             href="/search"
@@ -155,7 +150,7 @@ export default function SavedPage() {
         <div className="grid gap-4">
           {candidates.map((candidate) => (
             <GlassCard
-              key={candidate.id}
+              key={candidate.savedId || candidate.id}
               hover
               onClick={() => setSelectedCandidate(candidate)}
               className="cursor-pointer"
@@ -199,7 +194,7 @@ export default function SavedPage() {
 
                   {/* Notes Section */}
                   <div className="mt-3 pt-3 border-t border-white/10" onClick={(e) => e.stopPropagation()}>
-                    {editingNotes === candidate.id ? (
+                    {editingNotes === candidate.savedId ? (
                       <div className="space-y-2">
                         <textarea
                           value={noteText}
@@ -211,7 +206,7 @@ export default function SavedPage() {
                         />
                         <div className="flex gap-2">
                           <button
-                            onClick={() => candidate.id && handleSaveNotes(candidate.id)}
+                            onClick={() => candidate.savedId && handleSaveNotes(candidate.savedId)}
                             className="px-3 py-1 bg-[#30D158] text-white text-sm rounded-lg hover:bg-[#30D158]/90"
                           >
                             Save Notes
@@ -257,7 +252,7 @@ export default function SavedPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    candidate.id && handleRemove(candidate.id);
+                    candidate.savedId && handleRemove(candidate.savedId);
                   }}
                   className="px-3 py-1.5 bg-red-500/20 text-red-400 text-sm rounded-lg hover:bg-red-500/30 transition-colors flex items-center gap-1"
                 >

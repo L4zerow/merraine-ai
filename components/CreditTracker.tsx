@@ -1,31 +1,36 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getStoredCredits, getWarningLevel, getRemainingCredits, updatePearchBalance, CreditState } from '@/lib/credits';
+import { useState, useEffect, useRef } from 'react';
+import { getWarningLevel } from '@/lib/credits';
+import { useUser } from '@/lib/userContext';
+
+interface BalanceData {
+  credits_remaining: number | null;
+  masterBalance: number | null;
+  userAllocation: number;
+  role: string;
+  source: string;
+}
 
 export default function CreditTracker() {
-  const [credits, setCredits] = useState<CreditState | null>(null);
+  const { user } = useUser();
+  const [balance, setBalance] = useState<BalanceData | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const popupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const loadCredits = () => {
-      setCredits(getStoredCredits());
+    const loadBalance = () => {
+      fetch('/api/credits/balance')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) setBalance(data);
+        })
+        .catch(() => {});
     };
 
-    loadCredits();
+    loadBalance();
 
-    // Sync real balance from DB on every page navigation
-    fetch('/api/credits/balance')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.credits_remaining != null) {
-          updatePearchBalance(data.credits_remaining);
-          loadCredits();
-        }
-      })
-      .catch(() => {});
-
-    const handleCreditUpdate = () => loadCredits();
+    const handleCreditUpdate = () => loadBalance();
     window.addEventListener('creditUpdate', handleCreditUpdate);
 
     return () => {
@@ -33,22 +38,33 @@ export default function CreditTracker() {
     };
   }, []);
 
-  // Show nothing until credits load to prevent flash of wrong number
-  if (!credits) {
+  // Close popup when clicking outside
+  useEffect(() => {
+    if (!isExpanded) return;
+    const handleClick = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+        setIsExpanded(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isExpanded]);
+
+  if (!balance || balance.credits_remaining === null) {
     return (
       <div className="glass-card px-4 py-2 rounded-full flex items-center gap-3 opacity-50">
         <div className="w-2 h-2 rounded-full bg-white/30 animate-pulse" />
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-white/50">—</span>
+          <span className="text-sm font-medium text-white/50">&mdash;</span>
           <span className="text-xs text-white/50">credits</span>
         </div>
       </div>
     );
   }
 
-  const remaining = credits.ppiBalance ?? (credits.limit - credits.used);
-  const hasPearchBalance = credits.ppiBalance !== null;
+  const remaining = balance.userAllocation;
   const warningLevel = getWarningLevel(remaining);
+  const isAdmin = balance.role === 'admin';
 
   const getStatusColor = () => {
     switch (warningLevel) {
@@ -60,7 +76,7 @@ export default function CreditTracker() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={popupRef}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="glass-card px-4 py-2 rounded-full flex items-center gap-3 transition-all duration-300 hover:scale-105"
@@ -77,17 +93,22 @@ export default function CreditTracker() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-white">Credit Balance</h3>
-              {hasPearchBalance && (
+              {balance.source === 'live' && (
                 <span className="text-[10px] text-emerald-400/70 bg-emerald-500/10 px-1.5 py-0.5 rounded">LIVE</span>
               )}
             </div>
 
             <div className="text-center p-4 rounded-lg bg-white/5">
               <div className="text-3xl font-bold text-white">{remaining.toLocaleString()}</div>
-              <div className="text-xs text-white/50 mt-1">
-                {hasPearchBalance ? 'Credits remaining' : 'Estimated credits remaining'}
-              </div>
+              <div className="text-xs text-white/50 mt-1">Your allocated credits</div>
             </div>
+
+            {isAdmin && balance.masterBalance !== null && (
+              <div className="p-3 rounded-lg bg-white/5">
+                <div className="text-xs text-white/50 mb-1">Master Pool</div>
+                <div className="text-lg font-semibold text-white">{balance.masterBalance.toLocaleString()}</div>
+              </div>
+            )}
 
             {warningLevel !== 'none' && (
               <div className={`text-xs p-2 rounded-lg ${
@@ -98,20 +119,6 @@ export default function CreditTracker() {
                 {warningLevel === 'critical' && 'Credits very low — contact admin.'}
                 {warningLevel === 'danger' && 'Credits running low.'}
                 {warningLevel === 'warning' && 'Credit balance getting low.'}
-              </div>
-            )}
-
-            {credits.logs.length > 0 && (
-              <div>
-                <div className="text-xs text-white/50 mb-2">Recent Activity</div>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {credits.logs.slice(-5).reverse().map((log, i) => (
-                    <div key={i} className="flex justify-between text-xs">
-                      <span className="text-white/70 truncate">{log.operation}</span>
-                      <span className="text-white/50">-{log.credits}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>

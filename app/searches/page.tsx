@@ -5,7 +5,7 @@ import { GlassCard, GlassButton } from '@/components/ui';
 import { Profile } from '@/lib/pearch';
 import CandidateDetailModal from '@/components/CandidateDetailModal';
 import CandidateTable from '@/components/search/CandidateTable';
-import { saveCandidate, isCandidateSaved } from '@/lib/savedCandidates';
+import { saveCandidate } from '@/lib/savedCandidates';
 
 interface SavedSearch {
   id: number;
@@ -61,14 +61,7 @@ export default function SavedSearchesPage() {
       const data = await response.json();
       setCandidates(data.candidates || []);
 
-      // Update saved IDs
-      const newSavedIds = new Set<string>();
-      (data.candidates || []).forEach((p: Profile) => {
-        if (p.id && isCandidateSaved(p.id)) {
-          newSavedIds.add(p.id);
-        }
-      });
-      setSavedIds(newSavedIds);
+      // Saved IDs tracked via handleSaveCandidate
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load candidates');
     } finally {
@@ -106,9 +99,9 @@ export default function SavedSearchesPage() {
     }
   };
 
-  const handleSaveCandidate = (profile: Profile) => {
+  const handleSaveCandidate = async (profile: Profile) => {
     if (!profile.id) return;
-    saveCandidate(profile);
+    await saveCandidate(profile);
     setSavedIds(prev => {
       const newSet = new Set(Array.from(prev));
       newSet.add(profile.id!);

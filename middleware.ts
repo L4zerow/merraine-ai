@@ -3,7 +3,8 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const authCookie = request.cookies.get('merraine-auth');
-  const isAuthenticated = authCookie?.value === 'authenticated';
+  // Session-based auth: cookie value is a UUID (length > 10), not 'authenticated'
+  const isAuthenticated = !!authCookie?.value && authCookie.value.length > 10;
   const isLoginPage = request.nextUrl.pathname === '/login';
   const isAuthApi = request.nextUrl.pathname.startsWith('/api/auth');
 

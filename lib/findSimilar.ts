@@ -7,7 +7,7 @@ export interface SimilarSearchParams {
   location: string;
 }
 
-const MAX_QUERY_LENGTH = 150; // Keep queries focused for better Pearch matching
+const MAX_QUERY_LENGTH = 150; // Keep queries focused for better matching
 
 /**
  * Builds search parameters to find candidates similar to the given profile.

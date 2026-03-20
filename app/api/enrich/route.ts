@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createPearchClient, EnrichParams, calculateEnrichCost } from '@/lib/pearch';
 import { rateLimit, getIdentifier, createRateLimitHeaders } from '@/lib/rateLimit';
-import { enrichCandidateInDb, logCreditTransaction, getCandidateByPearchId, saveBalance } from '@/lib/db/queries';
+import { enrichCandidateInDb, logCreditTransaction, getCandidateByPearchId, saveBalance, getUserAllocation, adjustUserAllocation } from '@/lib/db/queries';
+import { requireUser, AuthError } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,41 +10,33 @@ const apiKey = process.env.PEARCH_API_KEY;
 const hasDatabase = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
 
 export async function GET(request: NextRequest) {
-  // Verify authentication
-  const cookieStore = cookies();
-  const authCookie = cookieStore.get('merraine-auth');
-  if (authCookie?.value !== 'authenticated') {
-    return NextResponse.json(
-      { error: 'Unauthorized - Please log in' },
-      { status: 401 }
-    );
-  }
-
-  // Rate limiting: 30 enrichments per minute (higher than search since these are quick)
-  const identifier = getIdentifier(request);
-  const rateLimitResult = rateLimit(identifier, { limit: 30, windowMs: 60000 });
-
-  if (!rateLimitResult.allowed) {
-    return NextResponse.json(
-      {
-        error: 'Too many requests. Please wait before enriching profiles again.',
-        retryAfter: Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000),
-      },
-      {
-        status: 429,
-        headers: createRateLimitHeaders(rateLimitResult, 30),
-      }
-    );
-  }
-
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'API key not configured' },
-      { status: 500 }
-    );
-  }
-
   try {
+    const user = await requireUser();
+
+    // Rate limiting: 30 enrichments per minute (higher than search since these are quick)
+    const identifier = getIdentifier(request);
+    const rateLimitResult = rateLimit(identifier, { limit: 30, windowMs: 60000 });
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Too many requests. Please wait before enriching profiles again.',
+          retryAfter: Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000),
+        },
+        {
+          status: 429,
+          headers: createRateLimitHeaders(rateLimitResult, 30),
+        }
+      );
+    }
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API key not configured' },
+        { status: 500 }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get('id');
 
@@ -89,10 +81,22 @@ export async function GET(request: NextRequest) {
 
     const estimatedCost = calculateEnrichCost(params);
 
+    // Check user's credit allocation
+    if (hasDatabase) {
+      const allocation = await getUserAllocation(user.id);
+      if (allocation < estimatedCost) {
+        return NextResponse.json(
+          { error: `Insufficient credits. You have ${allocation} allocated but need ${estimatedCost}. Ask an admin to allocate more.` },
+          { status: 402 }
+        );
+      }
+    }
+
     // Log enrich request for audit trail
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       endpoint: '/api/enrich',
+      userId: user.id,
       profileId: id?.substring(0, 20),
       highFreshness: params.high_freshness,
       revealEmails: params.reveal_emails,
@@ -111,7 +115,6 @@ export async function GET(request: NextRequest) {
         const resultAny = result as Record<string, unknown>;
         // Pearch enrich response nests data inside 'profile' object
         const profileData = (resultAny.profile || resultAny) as Record<string, unknown>;
-        // Email: check best_business_email, business_emails[], email, emails[]
         enrichData.email =
           (profileData.best_business_email as string) ||
           (profileData.business_emails as string[])?.[0] ||
@@ -119,7 +122,6 @@ export async function GET(request: NextRequest) {
           (resultAny.email as string) ||
           (resultAny.emails as string[])?.[0] ||
           undefined;
-        // Phone: check phone_numbers[], phone, phones[]
         enrichData.phone =
           (profileData.phone_numbers as string[])?.[0] ||
           (profileData.phone as string) ||
@@ -133,10 +135,14 @@ export async function GET(request: NextRequest) {
           high_freshness: params.high_freshness ?? false,
         });
 
+        // Deduct from user's allocation
+        await adjustUserAllocation(user.id, -estimatedCost);
+
         await logCreditTransaction({
           operation: 'enrich',
           credits: estimatedCost,
           details: `Enriched profile ${id.substring(0, 20)}`,
+          userId: user.id,
         });
       } catch (dbError) {
         // DB save failed but enrichment succeeded — don't fail the request
@@ -170,6 +176,9 @@ export async function GET(request: NextRequest) {
       estimatedCost,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Enrich error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Enrich failed' },

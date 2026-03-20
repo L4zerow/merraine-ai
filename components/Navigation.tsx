@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import CreditTracker from './CreditTracker';
+import { useUser } from '@/lib/userContext';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -16,12 +17,17 @@ const navItems = [
 export default function Navigation() {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, isAdmin } = useUser();
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
     router.refresh();
   };
+
+  const allNavItems = isAdmin
+    ? [...navItems, { href: '/admin', label: 'Admin', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' }]
+    : navItems;
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-40">
@@ -41,7 +47,7 @@ export default function Navigation() {
             </Link>
 
             <div className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => {
+              {allNavItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link
@@ -62,6 +68,11 @@ export default function Navigation() {
 
             <div className="flex items-center gap-4">
               <CreditTracker />
+              {user && (
+                <div className="hidden md:flex items-center gap-2 text-sm text-white/50">
+                  <span>{user.name}</span>
+                </div>
+              )}
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl text-white/60 hover:text-white hover:bg-white/5 transition-all duration-200"
@@ -78,7 +89,7 @@ export default function Navigation() {
 
       <div className="md:hidden fixed bottom-0 left-0 right-0 glass-card mx-4 mb-4 rounded-2xl">
         <div className="flex justify-around py-3">
-          {navItems.map((item) => {
+          {allNavItems.slice(0, 6).map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link

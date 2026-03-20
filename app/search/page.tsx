@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { GlassCard, GlassButton, GlassInput } from '@/components/ui';
 import { Profile, calculateSearchCost } from '@/lib/pearch';
 import { buildSimilarSearchParams } from '@/lib/findSimilar';
-import { logCreditUsage, canAfford, getRemainingCredits, updatePearchBalance } from '@/lib/credits';
 import { useCreditUpdate } from '@/components/CreditTracker';
-import { saveCandidate, isCandidateSaved, getSavedCount } from '@/lib/savedCandidates';
+import { saveCandidate } from '@/lib/savedCandidates';
+import { useUser } from '@/lib/userContext';
 import CandidateDetailModal from '@/components/CandidateDetailModal';
 import CandidateTable from '@/components/search/CandidateTable';
 import { getTierCounts, groupByTier, deduplicateProfiles } from '@/lib/searchResultsUtils';
@@ -33,8 +33,7 @@ interface SearchOptions {
 }
 
 /**
- * Split location input into an array for the Pearch API's custom_filters.locations.
- * Pass-through only: we split on ; and " and " and send the rest to Pearch as-is. Pearch handles all location parsing.
+ * Split location input into an array for the API's custom_filters.locations.
  */
 const QUERY_SUGGESTIONS: Record<string, string[]> = {
   'staffing': [
@@ -133,7 +132,7 @@ export default function SearchPage() {
   const [options, setOptions] = useState<SearchOptions>({
     type: 'fast',
     insights: false,
-    profile_scoring: false,  // Disabled by default - Pearch API currently returns same score for all results
+    profile_scoring: false,
     high_freshness: false,
     reveal_emails: false,
     reveal_phones: false,
@@ -147,7 +146,7 @@ export default function SearchPage() {
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [cacheAge, setCacheAge] = useState<number | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false); // Track if "Load More" was clicked
-  const [remainingCredits, setRemainingCredits] = useState<number | null>(null); // null until Pearch balance known
+  const [remainingCredits, setRemainingCredits] = useState<number | null>(null);
   const [jobContext, setJobContext] = useState<{ jobId: string; jobTitle: string } | null>(null);
   const [hasSearched, setHasSearched] = useState(false); // Track if user has performed a search
   const [lastSearchCost, setLastSearchCost] = useState<number | null>(null); // Actual credits used in last search
@@ -158,11 +157,12 @@ export default function SearchPage() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   const triggerCreditUpdate = useCreditUpdate();
+  const { allocation, refresh: refreshUser } = useUser();
 
-  // Load credits on client only (avoids hydration mismatch)
+  // Sync remainingCredits with user allocation from server
   useEffect(() => {
-    setRemainingCredits(getRemainingCredits());
-  }, []);
+    setRemainingCredits(allocation);
+  }, [allocation]);
 
   // Check for job context from Jobs page "Find Candidates" button
   useEffect(() => {
@@ -199,13 +199,8 @@ export default function SearchPage() {
 
   // Update saved status when results change
   useEffect(() => {
-    const newSavedIds = new Set<string>();
-    results.forEach(profile => {
-      if (profile.id && isCandidateSaved(profile.id)) {
-        newSavedIds.add(profile.id);
-      }
-    });
-    setSavedIds(newSavedIds);
+    // Saved candidates are tracked via the savedIds state set by handleSaveCandidate
+    // No need to check localStorage anymore
   }, [results]);
 
   // Handle "Find Similar" from candidate modal
@@ -242,9 +237,9 @@ export default function SearchPage() {
     clearSearchCache();
   };
 
-  const handleSaveCandidate = (profile: Profile) => {
+  const handleSaveCandidate = async (profile: Profile) => {
     if (!profile.id) return;
-    saveCandidate(profile);
+    await saveCandidate(profile);
     setSavedIds(prev => {
       const newSet = new Set(Array.from(prev));
       newSet.add(profile.id!);
@@ -312,9 +307,8 @@ export default function SearchPage() {
       return;
     }
 
-    if (!canAfford(estimatedCost)) {
-      const currentCredits = getRemainingCredits();
-      setError(`Not enough credits. You need ${estimatedCost} but have ${currentCredits ?? 'unknown'}.`);
+    if (remainingCredits !== null && estimatedCost > remainingCredits) {
+      setError(`Not enough credits. You need ${estimatedCost} but have ${remainingCredits}.`);
       return;
     }
 
@@ -384,16 +378,11 @@ export default function SearchPage() {
         options,
       });
 
-      // Update Pearch balance from API response (source of truth)
-      if (data.credits_remaining !== undefined) {
-        updatePearchBalance(data.credits_remaining);
-      }
-      // Log actual cost for history (charged per profile returned, not requested)
+      // Server deducts credits from allocation — refresh to get updated balance
       const estimatedActualCost = newProfiles.length * costPerProfile;
-      logCreditUsage('Search', estimatedActualCost, `${newProfiles.length} profiles`);
       setLastSearchCost(estimatedActualCost);
       triggerCreditUpdate();
-      setRemainingCredits(getRemainingCredits()); // Update local state
+      refreshUser(); // Refresh user allocation from server
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed');
     } finally {
@@ -461,7 +450,7 @@ export default function SearchPage() {
             />
           </div>
 
-          {/* Location Filter - Uses Pearch API's custom_filters.locations */}
+          {/* Location Filter */}
           <div>
             <div className="text-xs text-white/50 mb-2">Location Filter (optional)</div>
             <GlassInput
@@ -471,7 +460,7 @@ export default function SearchPage() {
               onKeyDown={(e) => e.key === 'Enter' && !loading && handleSearch()}
             />
             <div className="text-xs text-white/30 mt-1">
-              Passed to Pearch as-is. Use &quot;City, State&quot; format (e.g. Miami, FL) for accurate filtering. Multiple: &quot;Reno, NV; Auburn, CA&quot;
+              Use &quot;City, State&quot; format (e.g. Miami, FL) for accurate filtering. Multiple: &quot;Reno, NV; Auburn, CA&quot;
             </div>
           </div>
 
@@ -516,7 +505,6 @@ export default function SearchPage() {
               >
                 AI Insights <span className="opacity-70">+1</span>
               </button>
-              {/* Match Scoring removed - Pearch API returns same score for all results, no value for extra cost */}
               <button
                 onClick={() => toggleOption('high_freshness')}
                 className={`px-3 py-1.5 rounded-lg text-sm transition-all ${

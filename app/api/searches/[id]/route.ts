@@ -1,25 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { getSearchWithCandidates, renameSearch, deleteSearch } from '@/lib/db/queries';
+import { requireUser, AuthError } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
-
-function checkAuth() {
-  const cookieStore = cookies();
-  const authCookie = cookieStore.get('merraine-auth');
-  return authCookie?.value === 'authenticated';
-}
 
 // GET /api/searches/[id] — get a saved search with all its candidates
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  if (!checkAuth()) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    const user = await requireUser();
+
     const searchId = parseInt(params.id);
     if (isNaN(searchId)) {
       return NextResponse.json({ error: 'Invalid search ID' }, { status: 400 });
@@ -30,8 +22,16 @@ export async function GET(
       return NextResponse.json({ error: 'Search not found' }, { status: 404 });
     }
 
+    // Verify ownership (admins can see all)
+    if (user.role !== 'admin' && result.userId !== user.id) {
+      return NextResponse.json({ error: 'Search not found' }, { status: 404 });
+    }
+
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Get search error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to get search' },
@@ -45,14 +45,21 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  if (!checkAuth()) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    const user = await requireUser();
+
     const searchId = parseInt(params.id);
     if (isNaN(searchId)) {
       return NextResponse.json({ error: 'Invalid search ID' }, { status: 400 });
+    }
+
+    // Check ownership
+    const existing = await getSearchWithCandidates(searchId);
+    if (!existing) {
+      return NextResponse.json({ error: 'Search not found' }, { status: 404 });
+    }
+    if (user.role !== 'admin' && existing.userId !== user.id) {
+      return NextResponse.json({ error: 'Search not found' }, { status: 404 });
     }
 
     const body = await request.json();
@@ -69,6 +76,9 @@ export async function PATCH(
 
     return NextResponse.json({ search: updated });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Rename search error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to rename search' },
@@ -82,19 +92,29 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  if (!checkAuth()) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    const user = await requireUser();
+
     const searchId = parseInt(params.id);
     if (isNaN(searchId)) {
       return NextResponse.json({ error: 'Invalid search ID' }, { status: 400 });
     }
 
+    // Check ownership
+    const existing = await getSearchWithCandidates(searchId);
+    if (!existing) {
+      return NextResponse.json({ error: 'Search not found' }, { status: 404 });
+    }
+    if (user.role !== 'admin' && existing.userId !== user.id) {
+      return NextResponse.json({ error: 'Search not found' }, { status: 404 });
+    }
+
     await deleteSearch(searchId);
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Delete search error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to delete search' },

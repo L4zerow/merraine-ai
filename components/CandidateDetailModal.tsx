@@ -72,16 +72,7 @@ export default function CandidateDetailModal({
         });
       }
 
-      // Update credit balance from Pearch response
-      const { logCreditUsage, updatePearchBalance } = await import('@/lib/credits');
-      if (data.credits_remaining !== undefined) {
-        updatePearchBalance(data.credits_remaining);
-      }
-      const cost = data.estimatedCost || 0;
-      if (cost > 0) {
-        logCreditUsage('Enrich', cost, `${type} for ${profile.name}`);
-      }
-      // Trigger credit display update
+      // Trigger credit display update (server tracks the deduction)
       window.dispatchEvent(new CustomEvent('creditUpdate'));
     } catch (err) {
       setEnrichError(err instanceof Error ? err.message : 'Enrichment failed');

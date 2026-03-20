@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { setSetting } from '@/lib/db/queries';
-
-const ENV_PASSWORD = process.env.AUTH_PASSWORD;
+import { requireAdmin, AuthError } from '@/lib/auth';
+import { updateUser } from '@/lib/db/queries';
 
 export async function POST(request: NextRequest) {
   try {
-    const { masterPassword, newPassword } = await request.json();
+    await requireAdmin();
 
-    if (!masterPassword || !newPassword) {
+    const { userId, newPassword } = await request.json();
+
+    if (!userId || !newPassword) {
       return NextResponse.json(
-        { error: 'Master password and new password are required' },
+        { error: 'User ID and new password are required' },
         { status: 400 }
       );
     }
@@ -22,27 +23,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify against the original env var password (master reset key)
-    if (!ENV_PASSWORD || masterPassword !== ENV_PASSWORD) {
-      return NextResponse.json(
-        { error: 'Master password is incorrect' },
-        { status: 403 }
-      );
-    }
-
     const newHash = await bcrypt.hash(newPassword, 12);
-    try {
-      await setSetting('password_hash', newHash);
-    } catch (err) {
-      console.error('Password reset save error:', err);
-      return NextResponse.json(
-        { error: 'Failed to save new password' },
-        { status: 503 }
-      );
+    const updated = await updateUser(userId, { passwordHash: newHash });
+
+    if (!updated) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json(
       { error: 'Invalid request' },
       { status: 400 }

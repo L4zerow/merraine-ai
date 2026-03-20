@@ -1,57 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
-import { getSetting } from '@/lib/db/queries';
-
-const VALID_USERNAME = process.env.AUTH_USERNAME;
-const ENV_PASSWORD = process.env.AUTH_PASSWORD;
-
-async function verifyPassword(password: string): Promise<boolean> {
-  try {
-    const storedHash = await getSetting('password_hash');
-    if (storedHash) {
-      return bcrypt.compare(password, storedHash);
-    }
-  } catch {
-    // DB not available — fall through to env var check
-  }
-
-  // Fallback: check env var (initial setup or DB unreachable)
-  return ENV_PASSWORD ? password === ENV_PASSWORD : false;
-}
+import { getUserByEmail } from '@/lib/db/queries';
+import { createSession } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!VALID_USERNAME) {
-      console.error('AUTH_USERNAME must be set in environment');
+    const { email, password } = await request.json();
+
+    if (!email || !password) {
       return NextResponse.json(
-        { error: 'Authentication not configured' },
-        { status: 500 }
+        { error: 'Email and password are required' },
+        { status: 400 }
       );
     }
 
-    const { username, password } = await request.json();
-
-    const usernameMatch = username === VALID_USERNAME;
-    const passwordMatch = usernameMatch ? await verifyPassword(password) : false;
-
-    if (usernameMatch && passwordMatch) {
-      const cookieStore = cookies();
-      cookieStore.set('merraine-auth', 'authenticated', {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 24 * 7,
-        path: '/',
-      });
-
-      return NextResponse.json({ success: true });
+    const user = await getUserByEmail(email);
+    if (!user || !user.isActive) {
+      return NextResponse.json(
+        { error: 'Invalid credentials' },
+        { status: 401 }
+      );
     }
 
-    return NextResponse.json(
-      { error: 'Invalid credentials' },
-      { status: 401 }
-    );
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordMatch) {
+      return NextResponse.json(
+        { error: 'Invalid credentials' },
+        { status: 401 }
+      );
+    }
+
+    const sessionId = await createSession(user.id);
+
+    const cookieStore = cookies();
+    cookieStore.set('merraine-auth', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    });
+
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    });
   } catch {
     return NextResponse.json(
       { error: 'Invalid request' },

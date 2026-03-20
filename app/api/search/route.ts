@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createPearchClient, SearchParams, calculateSearchCost, Profile, CustomFilters, PearchTimeoutError, PearchRateLimitError, PearchAuthError } from '@/lib/pearch';
 import { rateLimit, getIdentifier, createRateLimitHeaders } from '@/lib/rateLimit';
-import { saveBalance } from '@/lib/db/queries';
+import { saveBalance, getUserAllocation, adjustUserAllocation, logCreditTransaction } from '@/lib/db/queries';
+import { requireUser, AuthError } from '@/lib/auth';
 
 const apiKey = process.env.PEARCH_API_KEY;
 const hasDatabase = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
@@ -63,41 +63,33 @@ function transformSearchResults(apiResponse: Record<string, unknown>): Transform
 
 
 export async function POST(request: NextRequest) {
-  // Verify authentication
-  const cookieStore = cookies();
-  const authCookie = cookieStore.get('merraine-auth');
-  if (authCookie?.value !== 'authenticated') {
-    return NextResponse.json(
-      { error: 'Unauthorized - Please log in' },
-      { status: 401 }
-    );
-  }
-
-  // Rate limiting: 15 searches per minute
-  const identifier = getIdentifier(request);
-  const rateLimitResult = rateLimit(identifier, { limit: 15, windowMs: 60000 });
-
-  if (!rateLimitResult.allowed) {
-    return NextResponse.json(
-      {
-        error: 'Too many requests. Please wait before searching again.',
-        retryAfter: Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000),
-      },
-      {
-        status: 429,
-        headers: createRateLimitHeaders(rateLimitResult, 15),
-      }
-    );
-  }
-
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'API key not configured' },
-      { status: 500 }
-    );
-  }
-
   try {
+    const user = await requireUser();
+
+    // Rate limiting: 15 searches per minute
+    const identifier = getIdentifier(request);
+    const rateLimitResult = rateLimit(identifier, { limit: 15, windowMs: 60000 });
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Too many requests. Please wait before searching again.',
+          retryAfter: Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000),
+        },
+        {
+          status: 429,
+          headers: createRateLimitHeaders(rateLimitResult, 15),
+        }
+      );
+    }
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API key not configured' },
+        { status: 500 }
+      );
+    }
+
     const body: SearchParams = await request.json();
 
     if (!body.query) {
@@ -110,10 +102,23 @@ export async function POST(request: NextRequest) {
     const requestedLimit = body.limit || 10;
     const estimatedCost = calculateSearchCost(body, requestedLimit);
 
+    // Check user's credit allocation
+    if (hasDatabase) {
+      const allocation = await getUserAllocation(user.id);
+      if (allocation < estimatedCost) {
+        return NextResponse.json(
+          { error: `Insufficient credits. You have ${allocation} allocated but need up to ${estimatedCost}. Ask an admin to allocate more.` },
+          { status: 402 }
+        );
+      }
+    }
+
     // Log search request for audit trail
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       endpoint: '/api/search',
+      userId: user.id,
+      userEmail: user.email,
       query: body.query?.substring(0, 100),
       location: body.custom_filters?.locations?.[0] || 'none',
       searchType: body.type || 'fast',
@@ -124,7 +129,7 @@ export async function POST(request: NextRequest) {
 
     const client = createPearchClient(apiKey);
 
-    // Cap limit at Pearch max (1,000) — single call, no batching needed. Query and all other params are sent to Pearch as-is; we do not rewrite or alter queries.
+    // Cap limit at Pearch max (1,000) — single call, no batching needed
     body.limit = Math.min(requestedLimit, PEARCH_MAX_LIMIT);
 
     const result = await client.search(body);
@@ -134,6 +139,7 @@ export async function POST(request: NextRequest) {
     console.log(JSON.stringify({
       timestamp: new Date().toISOString(),
       endpoint: '/api/search',
+      userId: user.id,
       query: body.query?.substring(0, 100),
       thread_id: transformed.thread_id,
       creditsUsed: transformed.credits_used || estimatedCost,
@@ -145,11 +151,26 @@ export async function POST(request: NextRequest) {
       saveBalance(transformed.credits_remaining).catch(() => {});
     }
 
+    // Deduct from user's allocation based on actual cost
+    const actualCost = transformed.credits_used || estimatedCost;
+    if (hasDatabase) {
+      await adjustUserAllocation(user.id, -actualCost);
+      await logCreditTransaction({
+        operation: 'search',
+        credits: actualCost,
+        details: `Search: "${body.query?.substring(0, 50)}" - ${transformed.profiles.length} profiles`,
+        userId: user.id,
+      });
+    }
+
     return NextResponse.json({
       ...transformed,
       estimatedCost,
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Search error:', error);
 
     if (error instanceof PearchTimeoutError) {

@@ -3,19 +3,14 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { GlassCard, GlassButton } from '@/components/ui';
-import { getRemainingCredits, getStoredCredits, updatePearchBalance } from '@/lib/credits';
-import { getSavedCount } from '@/lib/savedCandidates';
+import { useUser } from '@/lib/userContext';
 
 export default function Dashboard() {
-  const [remaining, setRemaining] = useState<number | null>(null);
+  const { user, allocation } = useUser();
   const [savedCount, setSavedCount] = useState(0);
   const [searchCount, setSearchCount] = useState<number | null>(null);
-  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    setRemaining(getRemainingCredits());
-    setSavedCount(getSavedCount());
-
     // Fetch saved search count from DB
     fetch('/api/searches')
       .then(r => r.ok ? r.json() : null)
@@ -24,30 +19,25 @@ export default function Dashboard() {
       })
       .catch(() => {});
 
-    // Always sync Pearch balance from DB on load
-    // localStorage may be stale if another user ran a search
-    setSyncing(true);
-    fetch('/api/credits/balance')
+    // Fetch saved candidates count
+    fetch('/api/candidates/saved')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data?.credits_remaining != null) {
-          updatePearchBalance(data.credits_remaining);
-          setRemaining(data.credits_remaining);
-          window.dispatchEvent(new CustomEvent('creditUpdate'));
-        }
+        if (data?.candidates) setSavedCount(data.candidates.length);
       })
-      .catch(() => {})
-      .finally(() => setSyncing(false));
+      .catch(() => {});
 
     const handleUpdate = () => {
-      setRemaining(getRemainingCredits());
-      setSavedCount(getSavedCount());
+      fetch('/api/candidates/saved')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.candidates) setSavedCount(data.candidates.length);
+        })
+        .catch(() => {});
     };
 
-    window.addEventListener('creditUpdate', handleUpdate);
     window.addEventListener('savedCandidatesUpdate', handleUpdate);
     return () => {
-      window.removeEventListener('creditUpdate', handleUpdate);
       window.removeEventListener('savedCandidatesUpdate', handleUpdate);
     };
   }, []);
@@ -82,11 +72,9 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <GlassCard className="text-center">
           <div className="text-2xl font-bold text-white">
-            {syncing ? '...' : remaining !== null ? remaining.toLocaleString() : '—'}
+            {allocation.toLocaleString()}
           </div>
-          <div className="text-xs text-white/50">
-            Credits{syncing ? ' (syncing)' : ''}
-          </div>
+          <div className="text-xs text-white/50">Your Credits</div>
         </GlassCard>
         <GlassCard className="text-center">
           <div className="text-2xl font-bold text-white">{searchCount ?? 0}</div>
@@ -100,7 +88,7 @@ export default function Dashboard() {
 
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold text-white">
-          Welcome to <span className="gradient-text">Merraine AI</span>
+          Welcome{user ? `, ${user.name}` : ''} to <span className="gradient-text">Merraine AI</span>
         </h1>
         <p className="text-white/60 text-lg max-w-2xl mx-auto">
           AI-powered recruiting platform. Find the right candidates faster.

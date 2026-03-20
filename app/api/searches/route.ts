@@ -1,26 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import { createSearch, listSearches, addCandidatesToSearch, logCreditTransaction } from '@/lib/db/queries';
+import { requireUser, AuthError } from '@/lib/auth';
 import { Profile } from '@/lib/pearch';
 
 export const dynamic = 'force-dynamic';
 
-function checkAuth() {
-  const cookieStore = cookies();
-  const authCookie = cookieStore.get('merraine-auth');
-  return authCookie?.value === 'authenticated';
-}
-
-// GET /api/searches — list all saved searches
+// GET /api/searches — list saved searches for current user
 export async function GET() {
-  if (!checkAuth()) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
-    const result = await listSearches();
+    const user = await requireUser();
+    // Users see their own searches; admins see all
+    const result = user.role === 'admin'
+      ? await listSearches()
+      : await listSearches(user.id);
     return NextResponse.json({ searches: result });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('List searches error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to list searches' },
@@ -31,11 +28,9 @@ export async function GET() {
 
 // POST /api/searches — save a search with its results
 export async function POST(request: NextRequest) {
-  if (!checkAuth()) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    const user = await requireUser();
+
     const body = await request.json();
     const { name, query, location, options, threadId, creditsUsed, profiles } = body as {
       name: string;
@@ -54,7 +49,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the search record
+    // Create the search record with userId
     const search = await createSearch({
       name,
       query,
@@ -62,6 +57,7 @@ export async function POST(request: NextRequest) {
       options,
       threadId,
       creditsUsed,
+      userId: user.id,
     });
 
     // Save all candidates and link to this search
@@ -76,11 +72,15 @@ export async function POST(request: NextRequest) {
         credits: creditsUsed,
         details: `Saved search "${name}" with ${profiles?.length || 0} candidates`,
         searchId: search.id,
+        userId: user.id,
       });
     }
 
     return NextResponse.json({ search });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error('Save search error:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to save search' },

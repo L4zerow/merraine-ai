@@ -2,11 +2,14 @@
 
 import { ReactNode } from 'react';
 import { ToastProvider } from '@/components/ui';
+import { UserProvider } from '@/lib/userContext';
 
 export default function Providers({ children }: { children: ReactNode }) {
   return (
     <ToastProvider>
-      {children}
+      <UserProvider>
+        {children}
+      </UserProvider>
     </ToastProvider>
   );
 }
