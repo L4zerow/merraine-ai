@@ -92,7 +92,7 @@ export default function LoginPage() {
 
           <div className="mt-4 text-center">
             <p className="text-xs text-white/30">
-              Forgot your password? Ask an admin to reset it.
+              Forgot your password? Contact Myles to reset it.
             </p>
           </div>
         </div>
