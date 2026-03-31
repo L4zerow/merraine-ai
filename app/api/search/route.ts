@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Deduct from user's allocation based on actual cost
-    const actualCost = transformed.credits_used || estimatedCost;
+    const actualCost = transformed.credits_used ?? estimatedCost;
     if (hasDatabase) {
       await adjustUserAllocation(user.id, -actualCost);
       await logCreditTransaction({

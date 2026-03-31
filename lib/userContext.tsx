@@ -51,6 +51,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     fetchUser();
   }, []);
 
+  // Re-sync allocation when credits change (search, enrich, admin actions)
+  useEffect(() => {
+    const handleCreditUpdate = () => fetchUser();
+    window.addEventListener('creditUpdate', handleCreditUpdate);
+    return () => window.removeEventListener('creditUpdate', handleCreditUpdate);
+  }, []);
+
   return (
     <UserContext.Provider
       value={{

@@ -96,7 +96,7 @@ export interface MatchedJob {
 
 // Credit cost calculators
 export function calculateSearchCost(params: SearchParams, estimatedProfiles: number = 10): number {
-  let costPerProfile = params.type === 'pro' ? 5 : 1;
+  let costPerProfile = params.type === 'pro' ? 5 : 2;
   if (params.insights) costPerProfile += 1;
   if (params.profile_scoring) costPerProfile += 1;
   if (params.high_freshness) costPerProfile += 2;

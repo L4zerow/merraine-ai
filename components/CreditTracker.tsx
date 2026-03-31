@@ -63,7 +63,8 @@ export default function CreditTracker() {
   }
 
   const remaining = balance.userAllocation;
-  const warningLevel = getWarningLevel(remaining);
+  const masterUnavailable = balance.masterBalance === 0;
+  const warningLevel = masterUnavailable ? 'critical' : getWarningLevel(remaining);
   const isAdmin = balance.role === 'admin';
 
   const getStatusColor = () => {
@@ -110,7 +111,13 @@ export default function CreditTracker() {
               </div>
             )}
 
-            {warningLevel !== 'none' && (
+            {masterUnavailable && (
+              <div className="text-xs p-2 rounded-lg bg-red-500/20 text-red-300">
+                Credits unavailable — searches are temporarily blocked.
+              </div>
+            )}
+
+            {!masterUnavailable && warningLevel !== 'none' && (
               <div className={`text-xs p-2 rounded-lg ${
                 warningLevel === 'critical' ? 'bg-red-500/20 text-red-300' :
                 warningLevel === 'danger' ? 'bg-orange-500/20 text-orange-300' :

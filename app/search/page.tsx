@@ -164,6 +164,20 @@ export default function SearchPage() {
     setRemainingCredits(allocation);
   }, [allocation]);
 
+  // Fallback: if allocation is still 0 after initial load, fetch balance directly
+  useEffect(() => {
+    if (allocation === 0) {
+      fetch('/api/credits/balance')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.userAllocation > 0) {
+            setRemainingCredits(data.userAllocation);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [allocation]);
+
   // Check for job context from Jobs page "Find Candidates" button
   useEffect(() => {
     const jobSearchContext = sessionStorage.getItem('jobSearchContext');
@@ -284,7 +298,7 @@ export default function SearchPage() {
 
   // Calculate cost per profile
   const getCostPerProfile = () => {
-    let cost = options.type === 'pro' ? 5 : 1;
+    let cost = options.type === 'pro' ? 5 : 2;
     if (options.insights) cost += 1;
     if (options.profile_scoring) cost += 1;
     if (options.high_freshness) cost += 2;
